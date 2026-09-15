@@ -20,22 +20,7 @@ export default function LoginScreen() {
       return;
     }
 
-    router.replace("/(storage)/home");
-    // Temporary role for testing
-    // Later this will come from Backend API
-    // const role: "customer" | "staff" | "storage" | "admin" = "customer"; // Replace with actual role from backend
-
-    // if (role === "customer") {
-    //   router.replace("/(customer)/home");
-    // } else if (role === "staff") {
-    //   router.replace("/(staff)/home");
-    // } else if (role === "storage") {
-    //   router.replace("/(storage)/home");
-    // } else if (role === "admin") {
-    //   router.replace("/(admin)/home");
-    // } else {
-    //   Alert.alert("Login", "Invalid role.");
-    // }
+    router.replace("/(customer)/home");
   };
 
   return (
