@@ -11,26 +11,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { useApp } from '@/context/AppContext';
+import { MOCK_PRODUCTS } from '@/services/mockData';
 
 export default function WishlistScreen() {
   const router = useRouter();
+  const { wishlistIds, toggleWishlist, addToCart } = useApp();
 
-  const wishlistedItems = [
-    {
-      id: 'prod-1',
-      title: 'Ghế Bành Vải Bouclé Mềm Aethel',
-      price: 1280,
-      image:
-        'https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=400&auto=format&fit=crop&q=80',
-    },
-    {
-      id: 'prod-3',
-      title: 'Đèn Thả Trần Đồng Thau Solis',
-      price: 490,
-      image:
-        'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=400&auto=format&fit=crop&q=80',
-    },
-  ];
+  const wishlistedItems = MOCK_PRODUCTS.filter((item) => wishlistIds.has(item.id));
 
   return (
     <SafeAreaView style={styles.container}>
@@ -47,32 +35,63 @@ export default function WishlistScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <FlatList
-        data={wishlistedItems}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: 20 }}
-        renderItem={({ item }) => (
-          <View style={styles.itemCard}>
-            <Image source={{ uri: item.image }} style={styles.itemImage} />
-            <View style={styles.itemInfo}>
-              <Text style={styles.itemTitle}>{item.title}</Text>
-              <Text style={styles.itemPrice}>
-                ${item.price.toLocaleString()}
-              </Text>
+      {wishlistedItems.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="heart-outline" size={56} color="#C2B8A3" />
+          <Text style={styles.emptyTitle}>Chưa có sản phẩm yêu thích</Text>
+          <Text style={styles.emptySub}>
+            Nhấn vào biểu tượng trái tim ở bất kỳ sản phẩm nào để lưu lại danh sách này.
+          </Text>
+          <TouchableOpacity
+            onPress={() => router.push('/(customer)/shop' as any)}
+            style={styles.exploreBtn}
+            activeOpacity={0.88}
+          >
+            <Text style={styles.exploreBtnText}>KHÁM PHÁ SẢN PHẨM</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={wishlistedItems}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ padding: 20 }}
+          renderItem={({ item }) => (
+            <View style={styles.itemCard}>
               <TouchableOpacity
-                onPress={() => router.push('/(customer)/cart')}
-                style={styles.addBagBtn}
+                onPress={() => router.push(`/(customer)/product/${item.id}` as any)}
+                style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }}
               >
-                <Feather name="shopping-bag" size={12} color="#FFFFFF" />
-                <Text style={styles.addBagText}>Chuyển Vào Giỏ</Text>
+                <Image source={{ uri: item.image }} style={styles.itemImage} />
+                <View style={styles.itemInfo}>
+                  <Text style={styles.itemTitle} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.itemPrice}>
+                    ${item.price.toLocaleString()}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      addToCart(item);
+                      router.push('/(customer)/cart' as any);
+                    }}
+                    style={styles.addBagBtn}
+                  >
+                    <Feather name="shopping-bag" size={12} color="#FFFFFF" />
+                    <Text style={styles.addBagText}>Chuyển Vào Giỏ</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => toggleWishlist(item.id)}
+                style={styles.removeBtn}
+              >
+                <Ionicons name="heart" size={20} color="#D93838" />
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.removeBtn}>
-              <Ionicons name="heart" size={20} color="#D93838" />
-            </TouchableOpacity>
-          </View>
-        )}
-      />
+          )}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -104,6 +123,38 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#252525',
     fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#252525',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySub: {
+    fontSize: 13,
+    color: '#6E6860',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  exploreBtn: {
+    backgroundColor: '#8A6A48',
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 24,
+  },
+  exploreBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
   itemCard: {
     flexDirection: 'row',

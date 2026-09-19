@@ -42,19 +42,15 @@ export default function AccountScreen() {
     },
   ];
 
+  const handleLogout = () => {
+    router.replace('/(auth)/login');
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.iconButton}
-          activeOpacity={0.7}
-        >
-          <Feather name="arrow-left" size={20} color="#252525" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Tài Khoản Của Tôi</Text>
-        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -95,7 +91,7 @@ export default function AccountScreen() {
 
         {/* Logout */}
         <TouchableOpacity
-          onPress={() => router.replace('/(auth)/register')}
+          onPress={handleLogout}
           style={styles.logoutBtn}
           activeOpacity={0.8}
         >
@@ -115,23 +111,15 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#E2DBD0',
   },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#E9E1D5',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
     color: '#252525',
     fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
   },

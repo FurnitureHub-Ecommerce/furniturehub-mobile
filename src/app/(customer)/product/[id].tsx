@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,18 +12,21 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { useApp } from '@/context/AppContext';
+import { MOCK_PRODUCTS } from '@/services/mockData';
 
 const { width } = Dimensions.get('window');
 
 export default function ProductDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [isWishlisted, setIsWishlisted] = useState(false);
+  const { addToCart, wishlistIds, toggleWishlist, cartCount } = useApp();
 
-  const product = {
+  const product = MOCK_PRODUCTS.find((p) => p.id === id) || {
     id: id || 'prod-1',
     title: 'Ghế Bành Vải Bouclé Mềm Aethel',
     category: 'Phòng Khách',
+    categorySlug: 'cat-living',
     price: 1280,
     originalPrice: 1450,
     rating: 4.9,
@@ -34,7 +37,10 @@ export default function ProductDetailScreen() {
     material: 'Vải Bouclé Ý tự nhiên, Gỗ Sồi đạt chuẩn FSC',
     image:
       'https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=1000&auto=format&fit=crop&q=80',
+    filterType: 'featured' as const,
   };
+
+  const isWishlisted = wishlistIds.has(product.id);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -50,7 +56,7 @@ export default function ProductDetailScreen() {
 
         <View style={styles.headerRight}>
           <TouchableOpacity
-            onPress={() => setIsWishlisted(!isWishlisted)}
+            onPress={() => toggleWishlist(product.id)}
             style={styles.iconButton}
             activeOpacity={0.7}
           >
@@ -61,11 +67,16 @@ export default function ProductDetailScreen() {
             />
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => router.push('/(customer)/cart')}
+            onPress={() => router.push('/(customer)/cart' as any)}
             style={styles.iconButton}
             activeOpacity={0.7}
           >
             <Feather name="shopping-bag" size={18} color="#252525" />
+            {cartCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{cartCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -117,7 +128,10 @@ export default function ProductDetailScreen() {
       {/* Add to Bag Footer */}
       <View style={styles.footer}>
         <TouchableOpacity
-          onPress={() => router.push('/(customer)/cart')}
+          onPress={() => {
+            addToCart(product);
+            router.push('/(customer)/cart' as any);
+          }}
           style={styles.addBagBtn}
           activeOpacity={0.88}
         >
@@ -149,10 +163,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#E9E1D5',
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
   },
   headerRight: {
     flexDirection: 'row',
     gap: 10,
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#D93838',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '700',
   },
   scrollContent: {
     paddingBottom: 100,

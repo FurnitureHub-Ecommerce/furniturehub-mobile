@@ -7,44 +7,33 @@ import {
   TextInput,
   FlatList,
   Image,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { MOCK_PRODUCTS } from '@/services/mockData';
 
 export default function SearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState('');
 
   const suggestions = [
-    'Bàn Ăn Gỗ Sồi Nguyên Khối',
+    'Bàn Ăn Gỗ Sồi',
     'Ghế Bành Vải Bouclé',
-    'Đèn Thả Trần Đồng Thau',
+    'Đèn Thả Trần',
     'Sofa Góc Nỉ Nhung',
-    'Bàn Trà Đá Travertine',
+    'Phòng Ngủ Kiểu Nhật',
   ];
 
-  const searchResults = [
-    {
-      id: 'prod-1',
-      title: 'Ghế Bành Vải Bouclé Mềm Aethel',
-      category: 'Phòng Khách',
-      price: 1280,
-      rating: 4.9,
-      image:
-        'https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=400&auto=format&fit=crop&q=80',
-    },
-    {
-      id: 'prod-2',
-      title: 'Bàn Ăn Gỗ Sồi Nguyên Khối Komorebi',
-      category: 'Phòng Ăn',
-      price: 2450,
-      rating: 5.0,
-      image:
-        'https://images.unsplash.com/photo-1615066390971-03e4e1c36ddf?w=400&auto=format&fit=crop&q=80',
-    },
-  ];
+  const searchResults = MOCK_PRODUCTS.filter((prod) => {
+    if (!query.trim()) return false;
+    const q = query.toLowerCase();
+    return (
+      prod.title.toLowerCase().includes(q) ||
+      prod.category.toLowerCase().includes(q) ||
+      (prod.description && prod.description.toLowerCase().includes(q))
+    );
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -77,7 +66,7 @@ export default function SearchScreen() {
       </View>
 
       <View style={styles.content}>
-        {query.length === 0 ? (
+        {query.trim().length === 0 ? (
           <View>
             <Text style={styles.sectionTitle}>TÌM KIẾM PHỔ BIẾN</Text>
             <View style={styles.tagGroup}>
@@ -94,6 +83,14 @@ export default function SearchScreen() {
               ))}
             </View>
           </View>
+        ) : searchResults.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Feather name="search" size={48} color="#C2B8A3" />
+            <Text style={styles.emptyTitle}>Không tìm thấy kết quả</Text>
+            <Text style={styles.emptySub}>
+              Không tìm thấy sản phẩm nào khớp với từ khóa "{query}".
+            </Text>
+          </View>
         ) : (
           <FlatList
             data={searchResults}
@@ -101,7 +98,7 @@ export default function SearchScreen() {
             contentContainerStyle={{ paddingBottom: 40 }}
             renderItem={({ item }) => (
               <TouchableOpacity
-                onPress={() => router.push(`/product/${item.id}`)}
+                onPress={() => router.push(`/(customer)/product/${item.id}`)}
                 style={styles.resultCard}
                 activeOpacity={0.88}
               >
@@ -197,6 +194,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#252525',
     fontWeight: '500',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 60,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#252525',
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  emptySub: {
+    fontSize: 13,
+    color: '#6E6860',
+    textAlign: 'center',
   },
   resultCard: {
     flexDirection: 'row',

@@ -20,7 +20,7 @@ export default function LoginScreen() {
       return;
     }
 
-    router.replace("/(customer)/home");
+    router.replace("/(customer)/home" as any);
   };
 
   return (

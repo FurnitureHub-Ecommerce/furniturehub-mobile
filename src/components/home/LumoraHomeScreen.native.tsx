@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,234 +10,37 @@ import {
   Platform,
   SafeAreaView,
   StatusBar,
+  RefreshControl,
+  ListRenderItemInfo,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, Feather } from '@expo/vector-icons';
 import { styles, COLORS } from './LumoraHomeScreen.styles';
-
-// ============================================================================
-// REALISTIC MOCK DATASETS
-// ============================================================================
-
-const BRAND_LOGO_URI =
-  'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=600&auto=format&fit=crop&q=80'; // Stylized placeholder logo image
-
-const HERO_BANNER = {
-  id: 'hero-1',
-  tag: 'BỘ SƯU TẬP MÙA THU 2026',
-  title: 'Nghệ Thuật Sống Tối Giản',
-  image:
-    'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1200&auto=format&fit=crop&q=80',
-  ctaText: 'Khám Phá Bộ Sưu Tập',
-  categoryId: 'living',
-};
-
-const USP_ITEMS = [
-  {
-    id: 'usp-1',
-    icon: 'truck',
-    title: 'Giao Hàng Cao Cấp',
-    subtitle: 'Hỗ trợ sắp xếp tận nơi',
-  },
-  {
-    id: 'usp-2',
-    icon: 'shield',
-    title: 'Bảo Hành Chế Tác 10 Năm',
-    subtitle: 'Bền bỉ vượt thời gian',
-  },
-  {
-    id: 'usp-3',
-    icon: 'award',
-    title: 'Gỗ Sồi Tự Nhiên Bền Vững',
-    subtitle: 'Gỗ đạt chứng nhận FSC',
-  },
-];
-
-const CATEGORIES = [
-  {
-    id: 'cat-all',
-    name: 'Tất Cả Sản Phẩm',
-    image:
-      'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=300&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'cat-living',
-    name: 'Phòng Khách',
-    image:
-      'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'cat-dining',
-    name: 'Phòng Ăn',
-    image:
-      'https://images.unsplash.com/photo-1617806118233-18e1de247200?w=300&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'cat-bedroom',
-    name: 'Phòng Ngủ',
-    image:
-      'https://images.unsplash.com/photo-1540518614846-7ede433c517a?w=300&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'cat-workspace',
-    name: 'Phòng Làm Việc',
-    image:
-      'https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=300&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'cat-lighting',
-    name: 'Đèn & Chiếu Sáng',
-    image:
-      'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=300&auto=format&fit=crop&q=80',
-  },
-];
-
-const FILTER_TABS = [
-  { id: 'featured', label: 'Nổi Bật Tuyển Chọn' },
-  { id: 'new', label: 'Hàng Mới Về' },
-  { id: 'bestsellers', label: 'Bán Chạy Nhất' },
-];
-
-const MOCK_PRODUCTS = [
-  {
-    id: 'prod-1',
-    title: 'Ghế Bành Vải Bouclé Mềm Aethel',
-    category: 'Phòng Khách',
-    categorySlug: 'living',
-    price: 1280,
-    originalPrice: 1450,
-    rating: 4.9,
-    reviewCount: 42,
-    tag: 'BÁN CHẠY',
-    filterType: 'bestsellers',
-    image:
-      'https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'prod-2',
-    title: 'Bàn Ăn Gỗ Sồi Nguyên Khối Komorebi',
-    category: 'Phòng Ăn',
-    categorySlug: 'dining',
-    price: 2450,
-    originalPrice: null,
-    rating: 5.0,
-    reviewCount: 28,
-    tag: 'MỚI',
-    filterType: 'new',
-    image:
-      'https://images.unsplash.com/photo-1615066390971-03e4e1c36ddf?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'prod-3',
-    title: 'Đèn Thả Trần Đồng Thau Solis',
-    category: 'Đèn & Chiếu Sáng',
-    categorySlug: 'lighting',
-    price: 490,
-    originalPrice: 580,
-    rating: 4.8,
-    reviewCount: 65,
-    tag: 'TUYỂN CHỌN',
-    filterType: 'featured',
-    image:
-      'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'prod-4',
-    title: 'Giường Ngủ Kiểu Nhật Gỗ Nara',
-    category: 'Phòng Ngủ',
-    categorySlug: 'bedroom',
-    price: 2890,
-    originalPrice: 3200,
-    rating: 4.95,
-    reviewCount: 19,
-    tag: 'MỚI',
-    filterType: 'new',
-    image:
-      'https://images.unsplash.com/photo-1540518614846-7ede433c517a?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'prod-5',
-    title: 'Bàn Làm Việc Gỗ Óc Chó Verve',
-    category: 'Phòng Làm Việc',
-    categorySlug: 'workspace',
-    price: 1850,
-    originalPrice: null,
-    rating: 4.7,
-    reviewCount: 31,
-    tag: 'NỔI BẬT',
-    filterType: 'featured',
-    image:
-      'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'prod-6',
-    title: 'Sofa Góc Nỉ Nhung Cao Cấp Oasis',
-    category: 'Phòng Khách',
-    categorySlug: 'living',
-    price: 3600,
-    originalPrice: 4100,
-    rating: 4.98,
-    reviewCount: 84,
-    tag: 'BÁN CHẠY',
-    filterType: 'bestsellers',
-    image:
-      'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'prod-7',
-    title: 'Bàn Trà Đá Travertine Marquinia',
-    category: 'Phòng Khách',
-    categorySlug: 'living',
-    price: 1150,
-    originalPrice: null,
-    rating: 4.85,
-    reviewCount: 15,
-    tag: 'MỚI',
-    filterType: 'new',
-    image:
-      'https://images.unsplash.com/photo-1533090161767-e6ffed986c88?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'prod-8',
-    title: 'Thảm Dệt Tay Sợi Lông Cừu Lumina',
-    category: 'Trang Trí',
-    categorySlug: 'decor',
-    price: 780,
-    originalPrice: 890,
-    rating: 4.9,
-    reviewCount: 52,
-    tag: 'NỔI BẬT',
-    filterType: 'featured',
-    image:
-      'https://images.unsplash.com/photo-1600121848594-d8644e57abab?w=600&auto=format&fit=crop&q=80',
-  },
-];
-
-const LOOKBOOK_ITEM = {
-  id: 'lb-1',
-  tag: 'BÀI VIẾT NỔI BẬT',
-  title: 'Phong Cách Tối Giản Ấm Cúng: Cân Bằng Không Gian Trong Ngôi Nhà Hiện Đại',
-  description:
-    'Khám phá nghệ thuật kết hợp chất liệu tự nhiên, vải bouclé mềm mại và gỗ sồi nguyên khối từ các kiến trúc sư.',
-  image:
-    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1000&auto=format&fit=crop&q=80',
-  author: 'Elena Rostova',
-  authorAvatar:
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-};
-
-const BRAND_PILLARS = [
-  { id: 'p1', icon: 'leaf-outline', title: 'Gỗ Sồi Bền Vững' },
-  { id: 'p2', icon: 'hammer-outline', title: 'Thợ Thủ Công Bậc Thầy' },
-  { id: 'p3', icon: 'sparkles-outline', title: 'Thiết Kế Theo Yêu Cầu' },
-  { id: 'p4', icon: 'shield-checkmark-outline', title: 'Bảo Hành 10 Năm' },
-];
+import {
+  BANNERS,
+  USP_ITEMS,
+  CATEGORIES,
+  FILTER_TABS,
+  MOCK_PRODUCTS,
+  LOOKBOOK_ITEM,
+  BRAND_PILLARS,
+  BRAND_LOGO_URI,
+  Product,
+  Category,
+} from '@/services/mockData';
+import { useApp } from '@/context/AppContext';
+import { BannerCarousel } from './BannerCarousel';
+import { SkeletonLoader } from '../ui/SkeletonLoader';
 
 // ============================================================================
 // ANIMATED WISHLIST BUTTON COMPONENT
 // ============================================================================
-const WishlistButton = React.memo(({ isWishlisted, onToggle }) => {
+interface WishlistButtonProps {
+  isWishlisted: boolean;
+  onToggle: () => void;
+}
+
+const WishlistButton = React.memo<WishlistButtonProps>(({ isWishlisted, onToggle }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePress = () => {
@@ -278,83 +81,110 @@ const WishlistButton = React.memo(({ isWishlisted, onToggle }) => {
 // ============================================================================
 // PRODUCT CARD COMPONENT
 // ============================================================================
-const ProductCard = React.memo(({ item, isWishlisted, onToggleWishlist, onAddToCart, onPress }) => {
-  return (
-    <TouchableOpacity
-      activeOpacity={0.92}
-      onPress={() => onPress(item.id)}
-      style={styles.productCard}
-    >
-      <View style={styles.productImageWrapper}>
-        <Image source={{ uri: item.image }} style={styles.productImage} />
-        {item.tag && (
-          <View style={styles.badgeTag}>
-            <Text style={styles.badgeTagText}>{item.tag}</Text>
-          </View>
-        )}
-        <WishlistButton
-          isWishlisted={isWishlisted}
-          onToggle={() => onToggleWishlist(item.id)}
-        />
-      </View>
+interface ProductCardProps {
+  item: Product;
+  isWishlisted: boolean;
+  onToggleWishlist: (id: string) => void;
+  onAddToCart: (prod: Product) => void;
+  onPress: (id: string) => void;
+}
 
-      <View style={styles.productInfo}>
-        <Text style={styles.productCategory}>{item.category}</Text>
-        <Text style={styles.productTitle} numberOfLines={2}>
-          {item.title}
-        </Text>
-
-        <View style={styles.ratingRow}>
-          <Ionicons name="star" size={12} color={COLORS.RATING_GOLD} />
-          <Text style={styles.ratingText}>{item.rating}</Text>
-          <Text style={styles.reviewCount}>({item.reviewCount})</Text>
+const ProductCard = React.memo<ProductCardProps>(
+  ({ item, isWishlisted, onToggleWishlist, onAddToCart, onPress }) => {
+    return (
+      <TouchableOpacity
+        activeOpacity={0.92}
+        onPress={() => onPress(item.id)}
+        style={styles.productCard}
+      >
+        <View style={styles.productImageWrapper}>
+          <Image source={{ uri: item.image }} style={styles.productImage} />
+          {item.tag && (
+            <View style={styles.badgeTag}>
+              <Text style={styles.badgeTagText}>{item.tag}</Text>
+            </View>
+          )}
+          <WishlistButton
+            isWishlisted={isWishlisted}
+            onToggle={() => onToggleWishlist(item.id)}
+          />
         </View>
 
-        <View style={styles.priceRow}>
-          <View style={styles.priceGroup}>
-            <Text style={styles.productPrice}>${item.price.toLocaleString()}</Text>
-            {item.originalPrice && (
-              <Text style={styles.originalPrice}>
-                ${item.originalPrice.toLocaleString()}
-              </Text>
-            )}
+        <View style={styles.productInfo}>
+          <Text style={styles.productCategory}>{item.category}</Text>
+          <Text style={styles.productTitle} numberOfLines={2}>
+            {item.title}
+          </Text>
+
+          <View style={styles.ratingRow}>
+            <Ionicons name="star" size={12} color={COLORS.RATING_GOLD} />
+            <Text style={styles.ratingText}>{item.rating}</Text>
+            <Text style={styles.reviewCount}>({item.reviewCount})</Text>
           </View>
 
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={(e) => {
-              e.stopPropagation();
-              onAddToCart(item);
-            }}
-            style={styles.addBagButton}
-          >
-            <Feather name="plus" size={13} color={COLORS.WHITE} />
-            <Text style={styles.addBagText}>Giỏ</Text>
-          </TouchableOpacity>
+          <View style={styles.priceRow}>
+            <View style={styles.priceGroup}>
+              <Text style={styles.productPrice}>${item.price.toLocaleString()}</Text>
+              {item.originalPrice && (
+                <Text style={styles.originalPrice}>
+                  ${item.originalPrice.toLocaleString()}
+                </Text>
+              )}
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={(e) => {
+                e.stopPropagation();
+                onAddToCart(item);
+              }}
+              style={styles.addBagButton}
+            >
+              <Feather name="plus" size={13} color={COLORS.WHITE} />
+              <Text style={styles.addBagText}>Giỏ</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
-});
+      </TouchableOpacity>
+    );
+  }
+);
 
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 export default function LumoraHomeScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { cartCount, addToCart, wishlistIds, toggleWishlist } = useApp();
 
   // State Management
   const [selectedCategory, setSelectedCategory] = useState('cat-all');
   const [activeFilter, setActiveFilter] = useState('featured');
-  const [wishlistIds, setWishlistIds] = useState(new Set(['prod-1', 'prod-3']));
-  const [cartCount, setCartCount] = useState(2);
-  const [toastMessage, setToastMessage] = useState(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Animations
   const badgeScale = useRef(new Animated.Value(1)).current;
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastTranslateY = useRef(new Animated.Value(40)).current;
+
+  // Simulate Data Loading
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Pull to Refresh Handler
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 1000);
+  }, []);
 
   // Trigger Cart Badge Micro-animation
   const triggerCartAnimation = useCallback(() => {
@@ -375,7 +205,7 @@ export default function LumoraHomeScreen() {
 
   // Trigger Toast Notification
   const showToast = useCallback(
-    (productName) => {
+    (productName: string) => {
       setToastMessage(`Đã thêm "${productName}" vào giỏ hàng`);
 
       Animated.parallel([
@@ -410,40 +240,27 @@ export default function LumoraHomeScreen() {
     [toastOpacity, toastTranslateY]
   );
 
-  // Handlers
-  const handleToggleWishlist = useCallback((productId) => {
-    setWishlistIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(productId)) {
-        next.delete(productId);
-      } else {
-        next.add(productId);
-      }
-      return next;
-    });
-  }, []);
-
   const handleAddToCart = useCallback(
-    (product) => {
-      setCartCount((c) => c + 1);
+    (product: Product) => {
+      addToCart(product);
       triggerCartAnimation();
       showToast(product.title);
     },
-    [triggerCartAnimation, showToast]
+    [addToCart, triggerCartAnimation, showToast]
   );
 
   const handleProductPress = useCallback(
-    (productId) => {
-      router.push(`/product/${productId}`);
+    (productId: string) => {
+      router.push(`/(customer)/product/${productId}` as any);
     },
     [router]
   );
 
   const handleCategoryPress = useCallback(
-    (categoryId) => {
+    (categoryId: string) => {
       setSelectedCategory(categoryId);
       if (categoryId !== 'cat-all') {
-        router.push(`/category/${categoryId}`);
+        router.push(`/(customer)/category/${categoryId}` as any);
       }
     },
     [router]
@@ -452,8 +269,7 @@ export default function LumoraHomeScreen() {
   // Filter products cleanly
   const filteredProducts = MOCK_PRODUCTS.filter((prod) => {
     if (selectedCategory !== 'cat-all') {
-      const catObj = CATEGORIES.find((c) => c.id === selectedCategory);
-      if (catObj && prod.category.toLowerCase() !== catObj.name.toLowerCase()) {
+      if (prod.categorySlug !== selectedCategory) {
         return false;
       }
     }
@@ -461,19 +277,17 @@ export default function LumoraHomeScreen() {
     return prod.filterType === activeFilter;
   });
 
-  const [logoError, setLogoError] = useState(false);
-
-  // Render Header
+  // Render Header Bar
   const renderHeader = () => (
-    <View style={[styles.headerContainer, { paddingTop: Math.max(insets.top, 12) }]}>
+    <View style={styles.headerContainer}>
       <TouchableOpacity
         activeOpacity={0.8}
-        onPress={() => router.push('/')}
+        onPress={() => router.push('/(customer)/home' as any)}
         style={styles.logoWrapper}
       >
         {!logoError ? (
           <Image
-            source={{ uri: BRAND_LOGO_URI }}
+            source={require('@/assets/images/lumora-logo.png')}
             style={styles.logoImage}
             onError={() => setLogoError(true)}
           />
@@ -485,7 +299,7 @@ export default function LumoraHomeScreen() {
       <View style={styles.headerActions}>
         <TouchableOpacity
           activeOpacity={0.7}
-          onPress={() => router.push('/search')}
+          onPress={() => router.push('/(customer)/search' as any)}
           style={styles.headerIconButton}
         >
           <Feather name="search" size={18} color={COLORS.TEXT_DARK} />
@@ -493,7 +307,7 @@ export default function LumoraHomeScreen() {
 
         <TouchableOpacity
           activeOpacity={0.7}
-          onPress={() => router.push('/wishlist')}
+          onPress={() => router.push('/(customer)/wishlist' as any)}
           style={styles.headerIconButton}
         >
           <Feather name="heart" size={18} color={COLORS.TEXT_DARK} />
@@ -501,7 +315,7 @@ export default function LumoraHomeScreen() {
 
         <TouchableOpacity
           activeOpacity={0.7}
-          onPress={() => router.push('/cart')}
+          onPress={() => router.push('/(customer)/cart' as any)}
           style={styles.headerIconButton}
         >
           <Feather name="shopping-bag" size={18} color={COLORS.TEXT_DARK} />
@@ -522,32 +336,20 @@ export default function LumoraHomeScreen() {
     <View>
       {/* Search Trigger Bar */}
       <Pressable
-        onPress={() => router.push('/search')}
+        onPress={() => router.push('/(customer)/search' as any)}
         style={styles.searchContainer}
       >
         <Feather name="search" size={18} color={COLORS.TEXT_MUTED} />
-        <Text style={styles.searchPlaceholder}>Tìm kiếm bàn ăn gỗ sồi, sofa nỉ, đèn trang trí...</Text>
+        <Text style={styles.searchPlaceholder}>
+          Tìm kiếm bàn ăn gỗ sồi, sofa nỉ, đèn trang trí...
+        </Text>
         <View style={styles.filterIconButton}>
           <Feather name="sliders" size={16} color={COLORS.ACCENT_WOOD} />
         </View>
       </Pressable>
 
-      {/* Hero Banner */}
-      <TouchableOpacity
-        activeOpacity={0.94}
-        onPress={() => router.push(`/category/${HERO_BANNER.categoryId}`)}
-        style={styles.heroContainer}
-      >
-        <Image source={{ uri: HERO_BANNER.image }} style={styles.heroImage} />
-        <View style={styles.heroOverlay}>
-          <Text style={styles.heroTag}>{HERO_BANNER.tag}</Text>
-          <Text style={styles.heroTitle}>{HERO_BANNER.title}</Text>
-          <View style={styles.heroCTA}>
-            <Text style={styles.heroCTAText}>{HERO_BANNER.ctaText}</Text>
-            <Feather name="arrow-right" size={14} color={COLORS.WHITE} />
-          </View>
-        </View>
-      </TouchableOpacity>
+      {/* Banner Carousel */}
+      <BannerCarousel banners={BANNERS} />
 
       {/* USP Highlights Ticker */}
       <View style={styles.uspSection}>
@@ -578,7 +380,7 @@ export default function LumoraHomeScreen() {
           </View>
           <TouchableOpacity
             activeOpacity={0.7}
-            onPress={() => router.push('/shop')}
+            onPress={() => router.push('/(customer)/shop' as any)}
             style={styles.sectionLink}
           >
             <Text style={styles.sectionLinkText}>Tất Cả Danh Mục</Text>
@@ -593,8 +395,7 @@ export default function LumoraHomeScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryListContent}
           decelerationRate="fast"
-          snapToInterval={106} // width 92 + gap 14
-          renderItem={({ item }) => {
+          renderItem={({ item }: ListRenderItemInfo<Category>) => {
             const isActive = selectedCategory === item.id;
             return (
               <TouchableOpacity
@@ -628,7 +429,9 @@ export default function LumoraHomeScreen() {
       {/* Editorial Lookbook Showcase */}
       <TouchableOpacity
         activeOpacity={0.92}
-        onPress={() => router.push('/editorial/lookbook-1')}
+        onPress={() =>
+          router.push(`/(customer)/editorial/${LOOKBOOK_ITEM.id}` as any)
+        }
         style={styles.lookbookContainer}
       >
         <View style={styles.lookbookImageContainer}>
@@ -709,7 +512,7 @@ export default function LumoraHomeScreen() {
       <View style={styles.pillarGrid}>
         {BRAND_PILLARS.map((p) => (
           <View key={p.id} style={styles.pillarItem}>
-            <Ionicons name={p.icon} size={18} color={COLORS.ACCENT_WOOD} />
+            <Ionicons name={p.icon as any} size={18} color={COLORS.ACCENT_WOOD} />
             <Text style={styles.pillarItemText}>{p.title}</Text>
           </View>
         ))}
@@ -717,44 +520,66 @@ export default function LumoraHomeScreen() {
     </View>
   );
 
+  // Empty State Component
+  const renderEmptyState = () => (
+    <View style={styles.emptyStateContainer}>
+      <Feather name="inbox" size={40} color={COLORS.TEXT_MUTED} />
+      <Text style={styles.emptyStateTitle}>Chưa có sản phẩm nào</Text>
+      <Text style={styles.emptyStateSub}>
+        Vui lòng chọn bộ lọc khác để khám phá các sản phẩm nội thất.
+      </Text>
+    </View>
+  );
+
   // Render Product Card Wrapper
   const renderProductItem = useCallback(
-    ({ item }) => (
+    ({ item }: ListRenderItemInfo<Product>) => (
       <ProductCard
         item={item}
         isWishlisted={wishlistIds.has(item.id)}
-        onToggleWishlist={handleToggleWishlist}
+        onToggleWishlist={toggleWishlist}
         onAddToCart={handleAddToCart}
         onPress={handleProductPress}
       />
     ),
-    [wishlistIds, handleToggleWishlist, handleAddToCart, handleProductPress]
+    [wishlistIds, toggleWishlist, handleAddToCart, handleProductPress]
   );
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.PRIMARY_BG} />
-      
+
       {/* Header Bar */}
       {renderHeader()}
 
-      {/* SINGLE PARENT FLATLIST (Virtualization optimized, NO nested VirtualizedLists) */}
-      <FlatList
-        data={filteredProducts}
-        renderItem={renderProductItem}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        columnWrapperStyle={styles.columnWrapper}
-        contentContainerStyle={styles.productsGridContainer}
-        ListHeaderComponent={renderListHeader}
-        ListFooterComponent={renderListFooter}
-        // Performance Tuning Props
-        removeClippedSubviews={Platform.OS === 'android'}
-        initialNumToRender={6}
-        maxToRenderPerBatch={6}
-        windowSize={5}
-        showsVerticalScrollIndicator={false}
-      />
+      {isLoading ? (
+        <SkeletonLoader />
+      ) : (
+        <FlatList
+          data={filteredProducts}
+          renderItem={renderProductItem}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.columnWrapper}
+          contentContainerStyle={styles.productsGridContainer}
+          ListHeaderComponent={renderListHeader}
+          ListFooterComponent={renderListFooter}
+          ListEmptyComponent={renderEmptyState}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={COLORS.ACCENT_WOOD}
+              colors={[COLORS.ACCENT_WOOD]}
+            />
+          }
+          removeClippedSubviews={Platform.OS === 'android'}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          windowSize={5}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
 
       {/* Toast Feedback Banner */}
       <Animated.View
@@ -771,7 +596,9 @@ export default function LumoraHomeScreen() {
           <Ionicons name="checkmark-circle" size={20} color={COLORS.RATING_GOLD} />
           <Text style={styles.toastText}>{toastMessage}</Text>
         </View>
-        <Text style={styles.toastCTA}>Xem giỏ hàng</Text>
+        <TouchableOpacity onPress={() => router.push('/(customer)/cart' as any)}>
+          <Text style={styles.toastCTA}>Xem giỏ hàng</Text>
+        </TouchableOpacity>
       </Animated.View>
     </SafeAreaView>
   );
@@ -779,9 +606,9 @@ export default function LumoraHomeScreen() {
 
 const sectionSubtitleStyle = {
   fontSize: 11,
-  fontWeight: '700',
+  fontWeight: '700' as const,
   color: COLORS.ACCENT_WOOD,
   letterSpacing: 1.5,
-  textTransform: 'uppercase',
+  textTransform: 'uppercase' as const,
   marginBottom: 2,
 };
