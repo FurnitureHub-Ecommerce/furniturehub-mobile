@@ -1,22 +1,18 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   TouchableOpacity,
   FlatList,
-  Image,
-  Dimensions,
+  SafeAreaView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Feather, Ionicons } from '@expo/vector-icons';
-import { MOCK_PRODUCTS, CATEGORIES } from '@/services/mockData';
+import { Feather } from '@expo/vector-icons';
+import { MOCK_PRODUCTS, CATEGORIES, Product } from '@/services/mockData';
 import { useApp } from '@/context/AppContext';
-
-const { width } = Dimensions.get('window');
-const COLUMN_WIDTH = (width - 40 - 12) / 2;
+import { ProductCard } from '@/components/product/ProductCard';
 
 export default function CategoryDetailScreen() {
   const router = useRouter();
@@ -33,6 +29,26 @@ export default function CategoryDetailScreen() {
     if (id === 'cat-all' || !id) return true;
     return p.categorySlug === id;
   });
+
+  const handleProductPress = useCallback(
+    (productId: string) => {
+      router.push(`/(customer)/product/${productId}`);
+    },
+    [router]
+  );
+
+  const renderProductItem = useCallback(
+    ({ item }: { item: Product }) => (
+      <ProductCard
+        item={item}
+        isWishlisted={wishlistIds.has(item.id)}
+        onToggleWishlist={toggleWishlist}
+        onAddToCart={addToCart}
+        onPress={handleProductPress}
+      />
+    ),
+    [wishlistIds, toggleWishlist, addToCart, handleProductPress]
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -70,54 +86,8 @@ export default function CategoryDetailScreen() {
           numColumns={2}
           columnWrapperStyle={styles.columnWrapper}
           contentContainerStyle={styles.gridContainer}
-          renderItem={({ item }) => {
-            const isFav = wishlistIds.has(item.id);
-            return (
-              <TouchableOpacity
-                onPress={() => router.push(`/(customer)/product/${item.id}`)}
-                style={styles.productCard}
-                activeOpacity={0.9}
-              >
-                <View style={styles.imageWrapper}>
-                  <Image source={{ uri: item.image }} style={styles.productImage} />
-                  <TouchableOpacity
-                    onPress={() => toggleWishlist(item.id)}
-                    style={styles.wishlistBtn}
-                  >
-                    <Ionicons
-                      name={isFav ? 'heart' : 'heart-outline'}
-                      size={16}
-                      color={isFav ? '#D93838' : '#252525'}
-                    />
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.productInfo}>
-                  <Text style={styles.productCategory}>{item.category}</Text>
-                  <Text style={styles.productTitle} numberOfLines={2}>
-                    {item.title}
-                  </Text>
-                  <View style={styles.ratingRow}>
-                    <Ionicons name="star" size={12} color="#C89D5C" />
-                    <Text style={styles.ratingText}>{item.rating}</Text>
-                  </View>
-                  <View style={styles.priceRow}>
-                    <Text style={styles.productPrice}>
-                      ${item.price.toLocaleString()}
-                    </Text>
-                    <TouchableOpacity
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        addToCart(item);
-                      }}
-                      style={styles.addCartBtn}
-                    >
-                      <Feather name="plus" size={14} color="#FFFFFF" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            );
-          }}
+          renderItem={renderProductItem}
+          showsVerticalScrollIndicator={false}
         />
       )}
     </SafeAreaView>
@@ -171,87 +141,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   gridContainer: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
     paddingBottom: 40,
   },
   columnWrapper: {
     justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  productCard: {
-    width: COLUMN_WIDTH,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E2DBD0',
-    overflow: 'hidden',
-  },
-  imageWrapper: {
-    height: 150,
-    width: '100%',
-    backgroundColor: '#F7F4EE',
-    position: 'relative',
-  },
-  productImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  wishlistBtn: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  productInfo: {
-    padding: 12,
-  },
-  productCategory: {
-    fontSize: 10,
-    color: '#6E6860',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 2,
-  },
-  productTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#252525',
-    marginBottom: 6,
-    height: 36,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  ratingText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#252525',
-    marginLeft: 4,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  productPrice: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#8A6A48',
-  },
-  addCartBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#8A6A48',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });
