@@ -16,18 +16,18 @@ export default function LoginScreen() {
 
   const handleLogin = () => {
     if (!email || !password) {
-      Alert.alert("Login", "Please enter email and password.");
+      Alert.alert("Đăng nhập", "Vui lòng nhập email và mật khẩu.");
       return;
     }
 
-    router.replace("/(customer)/home");
+    router.replace("/(customer)/home" as any);
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>FurnitureHub</Text>
 
-      <Text style={styles.subtitle}>Login to your account</Text>
+      <Text style={styles.subtitle}>Đăng nhập tài khoản</Text>
 
       <TextInput
         style={styles.input}
@@ -40,18 +40,18 @@ export default function LoginScreen() {
 
       <TextInput
         style={styles.input}
-        placeholder="Password"
+        placeholder="Mật khẩu"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
       />
 
       <Pressable style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
+        <Text style={styles.buttonText}>Đăng nhập</Text>
       </Pressable>
 
       <Pressable onPress={() => router.push("/(auth)/register")}>
-        <Text style={styles.registerText}>Don't have an account? Register</Text>
+        <Text style={styles.registerText}>Chưa có tài khoản? Đăng ký ngay</Text>
       </Pressable>
     </View>
   );
