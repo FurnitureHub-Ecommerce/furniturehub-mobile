@@ -202,7 +202,7 @@ export const CATEGORIES: Category[] = [
 ];
 
 export const FILTER_TABS = [
-  { id: 'featured', label: 'Nổi Bật Tuyển Chọn' },
+  { id: 'featured', label: 'Nổi Bật' },
   { id: 'new', label: 'Hàng Mới Về' },
   { id: 'bestsellers', label: 'Bán Chạy Nhất' },
 ];

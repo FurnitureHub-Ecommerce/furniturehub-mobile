@@ -69,7 +69,7 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(
 
           {/* Rating */}
           <View style={styles.ratingRow}>
-            <Ionicons name="star" size={12} color="#C89D5C" />
+            <Ionicons name="star" size={12} color="#ddab61" />
             <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
             <Text style={styles.reviewCount}>({item.reviewCount})</Text>
           </View>

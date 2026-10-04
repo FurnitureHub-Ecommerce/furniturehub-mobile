@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,35 +10,99 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { MOCK_PRODUCTS, CATEGORIES, Product } from '@/services/mockData';
 import { useApp } from '@/context/AppContext';
 import { ProductCard } from '@/components/product/ProductCard';
+
+const API_BASE_URL = "https://api-furniturehub-minhdevops.up.railway.app";
 
 export default function CategoryDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { addToCart, wishlistIds, toggleWishlist } = useApp();
 
-  const categoryObj = CATEGORIES.find((c) => c.id === id) || {
-    id: id || 'cat-all',
-    name: 'Danh Mục Sản Phẩm',
-    image: '',
-  };
+  const [categoryName, setCategoryName] = useState('Danh Mục Sản Phẩm');
+  const [products, setProducts] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const products = MOCK_PRODUCTS.filter((p) => {
-    if (id === 'cat-all' || !id) return true;
-    return p.categorySlug === id;
-  });
+  useEffect(() => {
+    const fetchCategoryData = async () => {
+      try {
+        const [prodRes, catRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/products`),
+          fetch(`${API_BASE_URL}/api/categories`),
+        ]);
+
+        if (catRes.ok) {
+          const catData = await catRes.json();
+          const rawCategories = Array.isArray(catData)
+            ? catData
+            : catData.categories || catData.data || [];
+          
+          const currentCat = rawCategories.find((c: any) => (c._id || c.id) === id);
+          if (currentCat) {
+            setCategoryName(currentCat.name);
+          } else if (id === 'cat-all') {
+            setCategoryName('Tất Cả Sản Phẩm');
+          }
+        }
+
+        if (prodRes.ok) {
+          const prodData = await prodRes.json();
+          const rawProducts = Array.isArray(prodData)
+            ? prodData
+            : prodData.data || prodData.products || [];
+
+          const formattedProducts = rawProducts.map((item: any) => {
+            const firstImage =
+              item.images && Array.isArray(item.images) && item.images.length > 0
+                ? item.images[0]
+                : "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?q=80&w=600";
+
+            return {
+              id: item._id || item.id,
+              title: item.name || item.title,
+              price: item.minPrice || item.price || 0,
+              originalPrice: item.originalPrice,
+              image: firstImage,
+              category: item.categoryName || "Nội Thất",
+              brand: item.brandId?.name || item.brand || "LUMORA",
+              categorySlug: item.categoryId?._id || item.categoryId || "cat-all",
+              rating: item.rating || 4.9,
+              reviewCount: item.reviewCount || 12,
+              tag: item.tag,
+              colors: item.colors || [],
+            };
+          });
+
+          // Lọc sản phẩm theo danh mục đang chọn
+          if (id && id !== 'cat-all') {
+            const filtered = formattedProducts.filter((p: any) => p.categorySlug === id);
+            setProducts(filtered);
+          } else {
+            setProducts(formattedProducts);
+          }
+        }
+      } catch (error) {
+        console.log("Lỗi tải dữ liệu danh mục:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchCategoryData();
+    }
+  }, [id]);
 
   const handleProductPress = useCallback(
     (productId: string) => {
-      router.push(`/(customer)/product/${productId}`);
+      router.push(`/(customer)/product/${productId}` as any);
     },
     [router]
   );
 
   const renderProductItem = useCallback(
-    ({ item }: { item: Product }) => (
+    ({ item }: { item: any }) => (
       <ProductCard
         item={item}
         isWishlisted={wishlistIds.has(item.id)}
@@ -61,9 +125,9 @@ export default function CategoryDetailScreen() {
         >
           <Feather name="arrow-left" size={20} color="#252525" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{categoryObj.name}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{categoryName}</Text>
         <TouchableOpacity
-          onPress={() => router.push('/(customer)/search')}
+          onPress={() => router.push('/(customer)/search' as any)}
           style={styles.iconButton}
           activeOpacity={0.7}
         >
@@ -71,7 +135,11 @@ export default function CategoryDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      {products.length === 0 ? (
+      {isLoading ? (
+        <View style={styles.emptyContainer}>
+          <Text style={{ color: '#8A6A48', fontWeight: '600' }}>Đang tải sản phẩm...</Text>
+        </View>
+      ) : products.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Feather name="box" size={48} color="#C2B8A3" />
           <Text style={styles.emptyTitle}>Chưa có sản phẩm nào</Text>
@@ -121,6 +189,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#252525',
     fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: 10,
   },
   emptyContainer: {
     flex: 1,
