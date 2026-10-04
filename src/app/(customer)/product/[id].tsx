@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -17,80 +17,108 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useApp } from '@/context/AppContext';
-import {
-  MOCK_PRODUCTS,
-  ProductVariantColor,
-  ProductVariantOption,
-} from '@/services/mockData';
 
 const { width } = Dimensions.get('window');
+const API_BASE_URL = "https://api-furniturehub-minhdevops.up.railway.app";
 
 export default function ProductDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { addToCart, wishlistIds, toggleWishlist, cartCount } = useApp();
 
-  // Find product or fallback to default
-  const product = useMemo(() => {
-    return MOCK_PRODUCTS.find((p) => p.id === id) || MOCK_PRODUCTS[0];
+  const [product, setProduct] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Gọi API lấy chi tiết sản phẩm theo id từ Backend
+  useEffect(() => {
+    const fetchProductDetail = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/products/${id}`);
+        if (response.ok) {
+          const data = await response.json();
+          const item = data.data || data;
+          
+          setProduct({
+            id: item._id || item.id,
+            title: item.name || item.title,
+            price: item.minPrice || item.price || 0,
+            originalPrice: item.originalPrice,
+            images: item.images && item.images.length > 0 ? item.images : ["https://images.unsplash.com/photo-1555041469-a586c61ea9bc?q=80&w=600"],
+            image: item.images?.[0] || item.image || "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?q=80&w=600",
+            category: item.categoryName || "Nội Thất",
+            brand: item.brandId?.name || item.brand || "LUMORA",
+            rating: item.rating || 4.9,
+            reviewCount: item.reviewCount || 12,
+            tag: item.tag,
+            description: item.description || "Thiết kế nội thất cao cấp mang lại nét đẹp tối giản đương đại.",
+            colors: item.colors || [],
+            options: item.options || [],
+            variantStocks: item.variantStocks || [],
+            dimensions: item.dimensions,
+            material: item.material,
+          });
+        }
+      } catch (error) {
+        console.log("Lỗi tải chi tiết sản phẩm:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchProductDetail();
+    }
   }, [id]);
+
+  if (isLoading || !product) {
+    return (
+      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <StatusBar barStyle="dark-content" backgroundColor="#F7F4EE" />
+        <Text style={{ color: '#8A6A48', fontWeight: '600' }}>Đang tải chi tiết sản phẩm...</Text>
+      </SafeAreaView>
+    );
+  }
 
   const isWishlisted = wishlistIds.has(product.id);
 
-  // Gallery Images List
-  const galleryImages = useMemo(() => {
-    if (product.images && product.images.length > 0) return product.images;
-    return [product.image];
-  }, [product]);
+  const galleryImages = product.images && product.images.length > 0 ? product.images : [product.image];
 
-  // Gallery Active Index State
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const galleryFlatListRef = useRef<FlatList>(null);
 
-  // Selected Variant States
-  const [selectedColor, setSelectedColor] = useState<ProductVariantColor | undefined>(
-    product.colors?.[0]
-  );
-  const [selectedOption, setSelectedOption] = useState<ProductVariantOption | undefined>(
-    product.options?.[0]
-  );
+  const [selectedColor, setSelectedColor] = useState<any>(product.colors?.[0]);
+  const [selectedOption, setSelectedOption] = useState<any>(product.options?.[0]);
   const [quantity, setQuantity] = useState(1);
 
-  // Toast feedback animation state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
 
-  // Stock Calculation per selected combination (Task 4 & 5)
   const currentVariantStock = useMemo(() => {
     if (!product.variantStocks || product.variantStocks.length === 0) {
       return { inStock: true, stockCount: 10 };
     }
-    const match = product.variantStocks.find((s) => {
+    const match = product.variantStocks.find((s: any) => {
       const colorMatch = s.colorId === selectedColor?.id;
       const optionMatch = !selectedOption || s.optionId === selectedOption?.id;
       return colorMatch && optionMatch;
     });
-
-    if (match) return match;
-    return { inStock: false, stockCount: 0 };
+    return match || { inStock: false, stockCount: 0 };
   }, [product.variantStocks, selectedColor, selectedOption]);
 
-  // Check if a specific color is in stock
   const isColorInStock = useCallback(
     (colorId: string) => {
       if (!product.variantStocks) return true;
       return product.variantStocks.some(
-        (s) => s.colorId === colorId && s.inStock && s.stockCount > 0
+        (s: any) => s.colorId === colorId && s.inStock && s.stockCount > 0
       );
     },
     [product.variantStocks]
   );
 
-  // Check if a specific option is in stock for currently selected color
   const isOptionInStock = useCallback(
     (optionId: string) => {
       if (!product.variantStocks) return true;
-      return product.variantStocks.some((s) => {
+      return product.variantStocks.some((s: any) => {
         const colorMatch = !selectedColor || s.colorId === selectedColor.id;
         return colorMatch && s.optionId === optionId && s.inStock && s.stockCount > 0;
       });
@@ -98,21 +126,18 @@ export default function ProductDetailScreen() {
     [product.variantStocks, selectedColor]
   );
 
-  // Dynamic Price Calculation based on option adjustment
   const dynamicPrice = useMemo(() => {
     const adjustment = selectedOption?.priceAdjustment || 0;
     return product.price + adjustment;
   }, [product.price, selectedOption]);
 
-  // Handle Color Selection (Task 5: Auto scroll gallery carousel image)
   const handleSelectColor = useCallback(
-    (color: ProductVariantColor) => {
+    (color: any) => {
       setSelectedColor(color);
       setQuantity(1);
 
-      // Find index of color image in gallery images list
       const colorImgIndex = galleryImages.findIndex(
-        (img) => img === color.image || img.includes(color.hex)
+        (img: string) => img === color.image || img.includes(color.hex)
       );
 
       if (colorImgIndex !== -1 && galleryFlatListRef.current) {
@@ -126,13 +151,11 @@ export default function ProductDetailScreen() {
     [galleryImages]
   );
 
-  // Handle Option Selection
-  const handleSelectOption = useCallback((option: ProductVariantOption) => {
+  const handleSelectOption = useCallback((option: any) => {
     setSelectedOption(option);
     setQuantity(1);
   }, []);
 
-  // Quantity Change Handlers
   const handleIncreaseQty = useCallback(() => {
     if (quantity < currentVariantStock.stockCount) {
       setQuantity((prev) => prev + 1);
@@ -147,7 +170,6 @@ export default function ProductDetailScreen() {
     }
   }, [quantity]);
 
-  // Toast Notification helper
   const showToast = (msg: string) => {
     setToastMessage(msg);
     Animated.sequence([
@@ -165,7 +187,6 @@ export default function ProductDetailScreen() {
     ]).start();
   };
 
-  // Add to Cart Handler
   const handleAddToCart = useCallback(() => {
     if (!currentVariantStock.inStock) {
       Alert.alert('Hết Hàng', 'Sản phẩm thuộc biến thể này hiện đang tạm hết hàng.');
@@ -173,16 +194,8 @@ export default function ProductDetailScreen() {
     }
     addToCart(product, quantity, selectedColor, selectedOption);
     showToast(`Đã thêm (${quantity}) "${product.title}" vào giỏ hàng`);
-  }, [
-    currentVariantStock,
-    addToCart,
-    product,
-    quantity,
-    selectedColor,
-    selectedOption,
-  ]);
+  }, [currentVariantStock, addToCart, product, quantity, selectedColor, selectedOption]);
 
-  // Buy Now Handler
   const handleBuyNow = useCallback(() => {
     if (!currentVariantStock.inStock) {
       Alert.alert('Hết Hàng', 'Sản phẩm thuộc biến thể này hiện đang tạm hết hàng.');
@@ -190,17 +203,8 @@ export default function ProductDetailScreen() {
     }
     addToCart(product, quantity, selectedColor, selectedOption);
     router.push('/(customer)/checkout' as any);
-  }, [
-    currentVariantStock,
-    addToCart,
-    product,
-    quantity,
-    selectedColor,
-    selectedOption,
-    router,
-  ]);
+  }, [currentVariantStock, addToCart, product, quantity, selectedColor, selectedOption, router]);
 
-  // Handle Gallery Scroll Pagination Index
   const onGalleryScroll = useCallback((event: any) => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
     const index = Math.round(contentOffsetX / width);
@@ -211,7 +215,6 @@ export default function ProductDetailScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F7F4EE" />
 
-      {/* Header Bar Overlay */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
@@ -254,7 +257,6 @@ export default function ProductDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* PRODUCT GALLERY CAROUSEL SLIDER (Task 5) */}
         <View style={styles.galleryContainer}>
           <FlatList
             ref={galleryFlatListRef}
@@ -272,16 +274,14 @@ export default function ProductDetailScreen() {
             )}
           />
 
-          {/* Page Counter Badge ("1/4") */}
           <View style={styles.galleryCounterBadge}>
             <Text style={styles.galleryCounterText}>
               {activeImageIndex + 1} / {galleryImages.length}
             </Text>
           </View>
 
-          {/* Pagination Dots */}
           <View style={styles.paginationDotsRow}>
-            {galleryImages.map((_, idx) => (
+            {galleryImages.map((_ : string, idx: number) => (
               <View
                 key={idx}
                 style={[
@@ -293,9 +293,7 @@ export default function ProductDetailScreen() {
           </View>
         </View>
 
-        {/* MAIN PRODUCT DETAILS */}
         <View style={styles.detailsSection}>
-          {/* Brand & Category */}
           <View style={styles.brandRow}>
             <Text style={styles.brandText}>{product.brand}</Text>
             <View style={styles.verifiedBadge}>
@@ -304,10 +302,8 @@ export default function ProductDetailScreen() {
             </View>
           </View>
 
-          {/* Product Title */}
           <Text style={styles.titleText}>{product.title}</Text>
 
-          {/* Rating & Review */}
           <View style={styles.ratingRow}>
             <View style={styles.starGroup}>
               <Ionicons name="star" size={15} color="#C89D5C" />
@@ -318,7 +314,6 @@ export default function ProductDetailScreen() {
             <Text style={styles.categoryName}>{product.category}</Text>
           </View>
 
-          {/* Dynamic Price Display */}
           <View style={styles.priceRow}>
             <Text style={styles.dynamicPrice}>${dynamicPrice.toLocaleString()}</Text>
             {product.originalPrice && (
@@ -333,12 +328,10 @@ export default function ProductDetailScreen() {
             )}
           </View>
 
-          {/* Description */}
           {product.description && (
             <Text style={styles.descriptionText}>{product.description}</Text>
           )}
 
-          {/* COLOR SWATCHES SELECTOR (Task 4 & 5) */}
           {product.colors && product.colors.length > 0 && (
             <View style={styles.variantSection}>
               <View style={styles.variantHeader}>
@@ -347,7 +340,7 @@ export default function ProductDetailScreen() {
               </View>
 
               <View style={styles.colorSwatchesRow}>
-                {product.colors.map((c) => {
+                {product.colors.map((c: any) => {
                   const isSelected = selectedColor?.id === c.id;
                   const inStock = isColorInStock(c.id);
 
@@ -380,7 +373,6 @@ export default function ProductDetailScreen() {
             </View>
           )}
 
-          {/* SIZE / MATERIAL PILL SELECTOR (Task 4 & 5) */}
           {product.options && product.options.length > 0 && (
             <View style={styles.variantSection}>
               <View style={styles.variantHeader}>
@@ -389,7 +381,7 @@ export default function ProductDetailScreen() {
               </View>
 
               <View style={styles.optionPillGroup}>
-                {product.options.map((opt) => {
+                {product.options.map((opt: any) => {
                   const isSelected = selectedOption?.id === opt.id;
                   const inStock = isOptionInStock(opt.id);
 
@@ -413,9 +405,7 @@ export default function ProductDetailScreen() {
                         ]}
                       >
                         {opt.label}
-                        {opt.priceAdjustment > 0
-                          ? ` (+$${opt.priceAdjustment})`
-                          : ''}
+                        {opt.priceAdjustment > 0 ? ` (+$${opt.priceAdjustment})` : ''}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -424,9 +414,7 @@ export default function ProductDetailScreen() {
             </View>
           )}
 
-          {/* STOCK STATUS INDICATOR & QUANTITY SELECTOR */}
           <View style={styles.stockQtyRow}>
-            {/* Stock Status Tag */}
             <View style={styles.stockStatusBox}>
               <Text style={styles.stockLabel}>Trạng thái kho:</Text>
               {currentVariantStock.inStock ? (
@@ -444,7 +432,6 @@ export default function ProductDetailScreen() {
               )}
             </View>
 
-            {/* Quantity Controls */}
             {currentVariantStock.inStock && (
               <View style={styles.qtyControlBox}>
                 <TouchableOpacity
@@ -467,26 +454,20 @@ export default function ProductDetailScreen() {
                   disabled={quantity >= currentVariantStock.stockCount}
                   style={[
                     styles.qtyBtn,
-                    quantity >= currentVariantStock.stockCount &&
-                      styles.qtyBtnDisabled,
+                    quantity >= currentVariantStock.stockCount && styles.qtyBtnDisabled,
                   ]}
                   activeOpacity={0.7}
                 >
                   <Feather
                     name="plus"
                     size={14}
-                    color={
-                      quantity >= currentVariantStock.stockCount
-                        ? '#C2B8A3'
-                        : '#252525'
-                    }
+                    color={quantity >= currentVariantStock.stockCount ? '#C2B8A3' : '#252525'}
                   />
                 </TouchableOpacity>
               </View>
             )}
           </View>
 
-          {/* PRODUCT SPECS CARD */}
           <View style={styles.specsCard}>
             <Text style={styles.specsCardTitle}>THÔNG SỐ KỸ THUẬT</Text>
             {product.dimensions && (
@@ -509,7 +490,6 @@ export default function ProductDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* TOAST FEEDBACK FLOATING BANNER */}
       {toastMessage && (
         <Animated.View
           style={[styles.toastContainer, { opacity: toastOpacity }]}
@@ -520,9 +500,7 @@ export default function ProductDetailScreen() {
         </Animated.View>
       )}
 
-      {/* FIXED BOTTOM ACTION BAR */}
       <View style={styles.bottomBar}>
-        {/* Wishlist Icon Button */}
         <TouchableOpacity
           onPress={() => toggleWishlist(product.id)}
           style={styles.bottomWishlistBtn}
@@ -535,7 +513,6 @@ export default function ProductDetailScreen() {
           />
         </TouchableOpacity>
 
-        {/* Add to Cart Button */}
         <TouchableOpacity
           onPress={handleAddToCart}
           disabled={!currentVariantStock.inStock}
@@ -549,7 +526,6 @@ export default function ProductDetailScreen() {
           <Text style={styles.addCartText}>THÊM VÀO GIỎ</Text>
         </TouchableOpacity>
 
-        {/* Buy Now Button */}
         <TouchableOpacity
           onPress={handleBuyNow}
           disabled={!currentVariantStock.inStock}
