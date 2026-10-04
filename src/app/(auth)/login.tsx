@@ -75,7 +75,13 @@ export default function LoginScreen() {
 
     try {
       setLoading(true);
-      await loginApi(email, password);
+      const data = await loginApi(email, password);
+
+      // QUAN TRỌNG: Lưu token nhận được từ Backend vào AsyncStorage
+      const token = data.token || data.accessToken || data.data?.token;
+      if (token) {
+        await AsyncStorage.setItem('token', token);
+      }
 
       if (rememberMe) {
         await AsyncStorage.setItem('@remembered_email', email);
@@ -87,7 +93,6 @@ export default function LoginScreen() {
 
       showToast("Đăng nhập thành công!", "success");
       
-      // Chờ thông báo hiển thị 1.5s rồi chuyển trang
       setTimeout(() => {
         router.replace("/(customer)/home" as any);
       }, 1500);
