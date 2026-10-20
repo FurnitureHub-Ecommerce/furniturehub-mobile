@@ -7,13 +7,13 @@ import {
   FlatList,
   SafeAreaView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useApp } from '@/context/AppContext';
 import { ProductCard } from '@/components/product/ProductCard';
-
-const API_BASE_URL = "https://api-furniturehub-minhdevops.up.railway.app";
+import { getProductsApi, getCategoriesApi } from '@/services/api';
 
 export default function CategoryDetailScreen() {
   const router = useRouter();
@@ -27,63 +27,55 @@ export default function CategoryDetailScreen() {
   useEffect(() => {
     const fetchCategoryData = async () => {
       try {
-        const [prodRes, catRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/products`),
-          fetch(`${API_BASE_URL}/api/categories`),
+        setIsLoading(true);
+        const [prodList, catList] = await Promise.all([
+          getProductsApi(),
+          getCategoriesApi(),
         ]);
 
-        if (catRes.ok) {
-          const catData = await catRes.json();
-          const rawCategories = Array.isArray(catData)
-            ? catData
-            : catData.categories || catData.data || [];
-          
-          const currentCat = rawCategories.find((c: any) => (c._id || c.id) === id);
-          if (currentCat) {
-            setCategoryName(currentCat.name);
-          } else if (id === 'cat-all') {
-            setCategoryName('Tất Cả Sản Phẩm');
-          }
+        const currentCat = catList.find((c: any) => (c._id || c.id) === id);
+        if (currentCat) {
+          setCategoryName(currentCat.name);
+        } else if (id === 'cat-all') {
+          setCategoryName('Tất Cả Sản Phẩm');
         }
 
-        if (prodRes.ok) {
-          const prodData = await prodRes.json();
-          const rawProducts = Array.isArray(prodData)
-            ? prodData
-            : prodData.data || prodData.products || [];
+        const formattedProducts = prodList.map((item: any) => {
+          const firstImage =
+            item.images && Array.isArray(item.images) && item.images.length > 0
+              ? item.images[0]
+              : item.image || "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?q=80&w=600";
 
-          const formattedProducts = rawProducts.map((item: any) => {
-            const firstImage =
-              item.images && Array.isArray(item.images) && item.images.length > 0
-                ? item.images[0]
-                : "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?q=80&w=600";
+          return {
+            id: item._id || item.id,
+            title: item.name || item.title,
+            price: item.minPrice || item.price || 0,
+            originalPrice: item.originalPrice,
+            image: firstImage,
+            category: item.categoryName || item.category || "Nội Thất",
+            brand: item.brandId?.name || item.brand || "LUMORA",
+            categorySlug: item.categoryId?._id || item.categoryId || item.categorySlug || "cat-all",
+            rating: item.rating || 4.9,
+            reviewCount: item.reviewCount || 12,
+            tag: item.tag,
+            colors: item.colors || [],
+          };
+        });
 
-            return {
-              id: item._id || item.id,
-              title: item.name || item.title,
-              price: item.minPrice || item.price || 0,
-              originalPrice: item.originalPrice,
-              image: firstImage,
-              category: item.categoryName || "Nội Thất",
-              brand: item.brandId?.name || item.brand || "LUMORA",
-              categorySlug: item.categoryId?._id || item.categoryId || "cat-all",
-              rating: item.rating || 4.9,
-              reviewCount: item.reviewCount || 12,
-              tag: item.tag,
-              colors: item.colors || [],
-            };
-          });
-
-          // Lọc sản phẩm theo danh mục đang chọn
-          if (id && id !== 'cat-all') {
-            const filtered = formattedProducts.filter((p: any) => p.categorySlug === id);
-            setProducts(filtered);
-          } else {
-            setProducts(formattedProducts);
-          }
+        // Lọc sản phẩm theo danh mục đang chọn
+        if (id && id !== 'cat-all') {
+          const filtered = formattedProducts.filter(
+            (p: any) =>
+              p.categorySlug === id ||
+              p.category?.toLowerCase() === categoryName.toLowerCase() ||
+              (currentCat && p.category?.toLowerCase() === currentCat.name?.toLowerCase())
+          );
+          setProducts(filtered.length > 0 ? filtered : formattedProducts);
+        } else {
+          setProducts(formattedProducts);
         }
       } catch (error) {
-        console.log("Lỗi tải dữ liệu danh mục:", error);
+        console.warn("Lỗi tải dữ liệu danh mục:", error);
       } finally {
         setIsLoading(false);
       }
@@ -92,7 +84,7 @@ export default function CategoryDetailScreen() {
     if (id) {
       fetchCategoryData();
     }
-  }, [id]);
+  }, [id, categoryName]);
 
   const handleProductPress = useCallback(
     (productId: string) => {
@@ -137,7 +129,10 @@ export default function CategoryDetailScreen() {
 
       {isLoading ? (
         <View style={styles.emptyContainer}>
-          <Text style={{ color: '#8A6A48', fontWeight: '600' }}>Đang tải sản phẩm...</Text>
+          <ActivityIndicator size="large" color="#8A6A48" />
+          <Text style={{ color: '#8A6A48', fontWeight: '600', marginTop: 12 }}>
+            Đang tải sản phẩm danh mục...
+          </Text>
         </View>
       ) : products.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -186,7 +181,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#252525',
     fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
     flex: 1,

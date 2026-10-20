@@ -5,7 +5,8 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { useApp } from '@/context/AppContext';
 
 export default function CustomerTabsLayout() {
-  const { cartCount } = useApp();
+  const { cartCount, wishlistIds } = useApp();
+  const wishlistCount = wishlistIds ? wishlistIds.size : 0;
 
   return (
     <Tabs
@@ -27,12 +28,13 @@ export default function CustomerTabsLayout() {
           shadowRadius: 4,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: '600',
-          letterSpacing: 0.3,
+          letterSpacing: 0.2,
         },
       }}
     >
+      {/* 1. Home Navigator */}
       <Tabs.Screen
         name="home"
         options={{
@@ -43,22 +45,44 @@ export default function CustomerTabsLayout() {
         }}
       />
 
+      {/* 2. Category / Shop Navigator */}
       <Tabs.Screen
         name="shop"
         options={{
-          title: 'Cửa Hàng',
+          title: 'Danh Mục',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'grid' : 'grid-outline'} size={22} color={color} />
+            <Ionicons name={focused ? 'grid' : 'grid-outline'} size={21} color={color} />
           ),
         }}
       />
 
+      {/* 3. Wishlist Navigator */}
+      <Tabs.Screen
+        name="wishlist"
+        options={{
+          title: 'Yêu Thích',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={styles.iconWrapper}>
+              <Ionicons name={focused ? 'heart' : 'heart-outline'} size={22} color={color} />
+              {wishlistCount > 0 && (
+                <View style={styles.wishlistBadge}>
+                  <Text style={styles.badgeText}>
+                    {wishlistCount > 99 ? '99+' : wishlistCount}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ),
+        }}
+      />
+
+      {/* 4. Cart Navigator */}
       <Tabs.Screen
         name="cart"
         options={{
           title: 'Giỏ Hàng',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={styles.cartIconWrapper}>
+          tabBarIcon: ({ color }) => (
+            <View style={styles.iconWrapper}>
               <Feather name="shopping-bag" size={21} color={color} />
               {cartCount > 0 && (
                 <View style={styles.badge}>
@@ -72,17 +96,18 @@ export default function CustomerTabsLayout() {
         }}
       />
 
+      {/* 5. Profile / Account Navigator */}
       <Tabs.Screen
         name="account"
         options={{
-          title: 'Tài Khoản',
+          title: 'Hồ Sơ',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={21} color={color} />
           ),
         }}
       />
 
-      {/* Ẩn file index khỏi thanh tab bar để tránh hiển thị tab thừa */}
+      {/* Ẩn file index khỏi thanh tab bar */}
       <Tabs.Screen
         name="index"
         options={{
@@ -94,7 +119,7 @@ export default function CustomerTabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  cartIconWrapper: {
+  iconWrapper: {
     width: 28,
     height: 24,
     justifyContent: 'center',
@@ -105,6 +130,18 @@ const styles = StyleSheet.create({
     top: -4,
     right: -8,
     backgroundColor: '#D93838',
+    borderRadius: 9,
+    minWidth: 17,
+    height: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  wishlistBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    backgroundColor: '#8A6A48',
     borderRadius: 9,
     minWidth: 17,
     height: 17,
