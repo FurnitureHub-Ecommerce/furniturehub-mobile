@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useApp } from '@/context/AppContext';
 import { MOCK_PRODUCTS } from '@/services/mockData';
+import { formatCurrency } from '@/services/api';
 
 export default function WishlistScreen() {
   const router = useRouter();
@@ -67,7 +68,7 @@ export default function WishlistScreen() {
                     {item.title}
                   </Text>
                   <Text style={styles.itemPrice}>
-                    ${item.price.toLocaleString()}
+                    {formatCurrency(item.price)}
                   </Text>
                   <TouchableOpacity
                     onPress={() => {

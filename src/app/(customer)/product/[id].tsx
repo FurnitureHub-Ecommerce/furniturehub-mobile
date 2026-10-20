@@ -17,9 +17,9 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useApp } from '@/context/AppContext';
+import { getProductDetailApi, getReviewsApi, ReviewItem, formatCurrency } from '@/services/api';
 
 const { width } = Dimensions.get('window');
-const API_BASE_URL = "https://api-furniturehub-minhdevops.up.railway.app";
 
 export default function ProductDetailScreen() {
   const router = useRouter();
@@ -27,47 +27,50 @@ export default function ProductDetailScreen() {
   const { addToCart, wishlistIds, toggleWishlist, cartCount } = useApp();
 
   const [product, setProduct] = useState<any>(null);
+  const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Gọi API lấy chi tiết sản phẩm theo id từ Backend
+  // Gọi API lấy chi tiết sản phẩm và đánh giá theo id
   useEffect(() => {
-    const fetchProductDetail = async () => {
+    const fetchProductData = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/products/${id}`);
-        if (response.ok) {
-          const data = await response.json();
-          const item = data.data || data;
-          
-          setProduct({
-            id: item._id || item.id,
-            title: item.name || item.title,
-            price: item.minPrice || item.price || 0,
-            originalPrice: item.originalPrice,
-            images: item.images && item.images.length > 0 ? item.images : ["https://images.unsplash.com/photo-1555041469-a586c61ea9bc?q=80&w=600"],
-            image: item.images?.[0] || item.image || "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?q=80&w=600",
-            category: item.categoryName || "Nội Thất",
-            brand: item.brandId?.name || item.brand || "LUMORA",
-            rating: item.rating || 4.9,
-            reviewCount: item.reviewCount || 12,
-            tag: item.tag,
-            description: item.description || "Thiết kế nội thất cao cấp mang lại nét đẹp tối giản đương đại.",
-            colors: item.colors || [],
-            options: item.options || [],
-            variantStocks: item.variantStocks || [],
-            dimensions: item.dimensions,
-            material: item.material,
-          });
-        }
+        setIsLoading(true);
+        if (!id) return;
+        const [productData, reviewsData] = await Promise.all([
+          getProductDetailApi(id),
+          getReviewsApi(id),
+        ]);
+
+        const item = productData.data || productData;
+        setProduct({
+          id: item._id || item.id,
+          title: item.name || item.title,
+          price: item.minPrice || item.price || 0,
+          originalPrice: item.originalPrice,
+          images: item.images && item.images.length > 0 ? item.images : [item.image || "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?q=80&w=600"],
+          image: item.images?.[0] || item.image || "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?q=80&w=600",
+          category: item.categoryName || item.category || "Nội Thất",
+          brand: item.brandId?.name || item.brand || "LUMORA",
+          rating: item.rating || 4.9,
+          reviewCount: item.reviewCount || 12,
+          tag: item.tag,
+          description: item.description || "Thiết kế nội thất cao cấp mang lại nét đẹp tối giản đương đại.",
+          colors: item.colors || [],
+          options: item.options || [],
+          variantStocks: item.variantStocks || [],
+          dimensions: item.dimensions,
+          material: item.material,
+        });
+
+        setReviews(reviewsData);
       } catch (error) {
-        console.log("Lỗi tải chi tiết sản phẩm:", error);
+        console.warn("Lỗi tải chi tiết sản phẩm:", error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    if (id) {
-      fetchProductDetail();
-    }
+    fetchProductData();
   }, [id]);
 
   if (isLoading || !product) {
@@ -157,10 +160,10 @@ export default function ProductDetailScreen() {
   }, []);
 
   const handleIncreaseQty = useCallback(() => {
-    if (quantity < currentVariantStock.stockCount) {
+    if (quantity < (currentVariantStock.stockCount || 10)) {
       setQuantity((prev) => prev + 1);
     } else {
-      showToast(`Chỉ còn ${currentVariantStock.stockCount} sản phẩm trong kho`);
+      showToast('Đã đạt số lượng tối đa có thể đặt');
     }
   }, [quantity, currentVariantStock]);
 
@@ -421,7 +424,7 @@ export default function ProductDetailScreen() {
                 <View style={styles.inStockBadge}>
                   <Ionicons name="checkmark-circle" size={14} color="#27AE60" />
                   <Text style={styles.inStockText}>
-                    Còn hàng ({currentVariantStock.stockCount} sp)
+                    Còn hàng
                   </Text>
                 </View>
               ) : (
@@ -484,8 +487,76 @@ export default function ProductDetailScreen() {
             )}
             <View style={styles.specRow}>
               <Text style={styles.specLabel}>Bảo hành chính hãng:</Text>
-              <Text style={styles.specValue}>10 Năm Khung Khung Gỗ</Text>
+              <Text style={styles.specValue}>10 Năm Khung Gỗ</Text>
             </View>
+          </View>
+
+          {/* Section Đánh Giá & Nhận Xét của Khách Hàng */}
+          <View style={styles.reviewsSection}>
+            <View style={styles.reviewsHeaderRow}>
+              <View>
+                <Text style={styles.reviewsSectionTitle}>ĐÁNH GIÁ TỪ KHÁCH HÀNG</Text>
+                <View style={styles.ratingOverviewRow}>
+                  <Ionicons name="star" size={16} color="#DDAB61" />
+                  <Text style={styles.ratingNumber}>
+                    {product.rating ? Number(product.rating).toFixed(1) : '4.9'}
+                  </Text>
+                  <Text style={styles.ratingCount}>
+                    ({reviews.length || product.reviewCount || 12} nhận xét)
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                onPress={() =>
+                  router.push(
+                    `/(customer)/review?productId=${product.id}&productTitle=${encodeURIComponent(
+                      product.title
+                    )}&productImage=${encodeURIComponent(product.image)}` as any
+                  )
+                }
+                style={styles.writeReviewBtn}
+                activeOpacity={0.8}
+              >
+                <Feather name="edit-3" size={13} color="#FFFFFF" />
+                <Text style={styles.writeReviewBtnText}>Viết Đánh Giá</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Danh sách các review */}
+            {reviews.map((rev, rIdx) => (
+              <View key={rev.id || rIdx} style={styles.reviewItemCard}>
+                <View style={styles.reviewUserRow}>
+                  <Text style={styles.reviewUserName}>
+                    {rev.userName || 'Khách Hàng Concierge'}
+                  </Text>
+                  <Text style={styles.reviewDate}>{rev.createdAt || 'Gần đây'}</Text>
+                </View>
+
+                <View style={styles.reviewStarsRow}>
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <Ionicons
+                      key={s}
+                      name={s <= rev.rating ? 'star' : 'star-outline'}
+                      size={13}
+                      color="#DDAB61"
+                    />
+                  ))}
+                </View>
+
+                <Text style={styles.reviewComment}>{rev.comment}</Text>
+
+                {rev.attributes && rev.attributes.length > 0 && (
+                  <View style={styles.reviewAttrRow}>
+                    {rev.attributes.map((attr, aIdx) => (
+                      <View key={aIdx} style={styles.reviewAttrBadge}>
+                        <Text style={styles.reviewAttrText}>{attr}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            ))}
           </View>
         </View>
       </ScrollView>
@@ -1019,5 +1090,104 @@ const styles = StyleSheet.create({
   btnDisabled: {
     backgroundColor: '#C2B8A3',
     opacity: 0.6,
+  },
+  reviewsSection: {
+    marginTop: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2DBD0',
+    padding: 16,
+  },
+  reviewsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F7F4EE',
+    paddingBottom: 12,
+  },
+  reviewsSectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#8A6A48',
+    letterSpacing: 1.2,
+    marginBottom: 4,
+  },
+  ratingOverviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratingNumber: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#252525',
+  },
+  ratingCount: {
+    fontSize: 12,
+    color: '#6E6860',
+  },
+  writeReviewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8A6A48',
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  writeReviewBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  reviewItemCard: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F7F4EE',
+  },
+  reviewUserRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  reviewUserName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#252525',
+  },
+  reviewDate: {
+    fontSize: 11,
+    color: '#999187',
+  },
+  reviewStarsRow: {
+    flexDirection: 'row',
+    gap: 2,
+    marginBottom: 6,
+  },
+  reviewComment: {
+    fontSize: 13,
+    color: '#4A453F',
+    lineHeight: 18,
+    marginBottom: 6,
+  },
+  reviewAttrRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  reviewAttrBadge: {
+    backgroundColor: '#F7F4EE',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  reviewAttrText: {
+    fontSize: 10,
+    color: '#8A6A48',
+    fontWeight: '500',
   },
 });
