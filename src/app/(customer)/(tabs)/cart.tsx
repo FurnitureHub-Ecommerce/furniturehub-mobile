@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useApp } from '@/context/AppContext';
+import { formatCurrency } from '@/services/api';
 
 export default function CartScreen() {
   const router = useRouter();
@@ -46,61 +47,70 @@ export default function CartScreen() {
               Đã chọn {cart.length} sản phẩm cao cấp
             </Text>
 
-            {cart.map((item) => (
-              <View key={item.product.id} style={styles.cartCard}>
-                <Image source={{ uri: item.product.image }} style={styles.itemImage} />
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemTitle} numberOfLines={1}>
-                    {item.product.title}
-                  </Text>
-                  <Text style={styles.itemPrice}>
-                    ${item.product.price.toLocaleString()}
-                  </Text>
+            {cart.map((item) => {
+              const itemUnitAdjusted = item.product.price + (item.selectedOption?.priceAdjustment || 0);
+              return (
+                <View key={item.product.id} style={styles.cartCard}>
+                  <Image source={{ uri: item.product.image }} style={styles.itemImage} />
+                  <View style={styles.itemInfo}>
+                    <Text style={styles.itemTitle} numberOfLines={1}>
+                      {item.product.title}
+                    </Text>
+                    {item.selectedColor && (
+                      <Text style={styles.variantInfo}>Màu: {item.selectedColor.name}</Text>
+                    )}
+                    {item.selectedOption && (
+                      <Text style={styles.variantInfo}>Phân loại: {item.selectedOption.name}</Text>
+                    )}
+                    <Text style={styles.itemPrice}>
+                      {formatCurrency(itemUnitAdjusted)}
+                    </Text>
 
-                  <View style={styles.quantityRow}>
-                    <TouchableOpacity
-                      onPress={() =>
-                        updateQuantity(item.product.id, item.quantity - 1)
-                      }
-                      style={styles.qtyBtn}
-                    >
-                      <Feather name="minus" size={14} color="#252525" />
-                    </TouchableOpacity>
-                    <Text style={styles.qtyText}>{item.quantity}</Text>
-                    <TouchableOpacity
-                      onPress={() =>
-                        updateQuantity(item.product.id, item.quantity + 1)
-                      }
-                      style={styles.qtyBtn}
-                    >
-                      <Feather name="plus" size={14} color="#252525" />
-                    </TouchableOpacity>
+                    <View style={styles.quantityRow}>
+                      <TouchableOpacity
+                        onPress={() =>
+                          updateQuantity(item.product.id, item.quantity - 1)
+                        }
+                        style={styles.qtyBtn}
+                      >
+                        <Feather name="minus" size={14} color="#252525" />
+                      </TouchableOpacity>
+                      <Text style={styles.qtyText}>{item.quantity}</Text>
+                      <TouchableOpacity
+                        onPress={() =>
+                          updateQuantity(item.product.id, item.quantity + 1)
+                        }
+                        style={styles.qtyBtn}
+                      >
+                        <Feather name="plus" size={14} color="#252525" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                </View>
 
-                <TouchableOpacity
-                  onPress={() => removeFromCart(item.product.id)}
-                  style={styles.removeBtn}
-                >
-                  <Feather name="trash-2" size={16} color="#6E6860" />
-                </TouchableOpacity>
-              </View>
-            ))}
+                  <TouchableOpacity
+                    onPress={() => removeFromCart(item.product.id)}
+                    style={styles.removeBtn}
+                  >
+                    <Feather name="trash-2" size={16} color="#6E6860" />
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
 
             {/* Order Summary */}
             <View style={styles.summaryContainer}>
               <Text style={styles.summaryTitle}>TỔNG QUAN ĐƠN HÀNG</Text>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Tạm tính</Text>
-                <Text style={styles.summaryValue}>${subtotal.toLocaleString()}</Text>
+                <Text style={styles.summaryValue}>{formatCurrency(subtotal)}</Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Phí vận chuyển cao cấp</Text>
-                <Text style={styles.summaryValue}>${shipping}</Text>
+                <Text style={styles.summaryValue}>{formatCurrency(shipping)}</Text>
               </View>
               <View style={[styles.summaryRow, styles.totalRow]}>
                 <Text style={styles.totalLabel}>Tổng thanh toán</Text>
-                <Text style={styles.totalValue}>${total.toLocaleString()}</Text>
+                <Text style={styles.totalValue}>{formatCurrency(total)}</Text>
               </View>
             </View>
           </ScrollView>
@@ -210,7 +220,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#252525',
-    marginBottom: 4,
+    marginBottom: 2,
+  },
+  variantInfo: {
+    fontSize: 11,
+    color: '#6E6860',
+    marginBottom: 2,
   },
   itemPrice: {
     fontSize: 15,

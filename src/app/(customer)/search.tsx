@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,37 +7,58 @@ import {
   TextInput,
   FlatList,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { MOCK_PRODUCTS } from '@/services/mockData';
+import { getProductsApi, formatCurrency } from '@/services/api';
+import { Product } from '@/services/mockData';
 
 export default function SearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState('');
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        setLoading(true);
+        const data = await getProductsApi();
+        setAllProducts(data);
+      } catch (err) {
+        console.warn('Lỗi tải sản phẩm cho tìm kiếm:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadProducts();
+  }, []);
 
   const suggestions = [
     'Bàn Ăn Gỗ Sồi',
-    'Ghế Bành Vải Bouclé',
+    'Ghế Bành Bouclé',
     'Đèn Thả Trần',
-    'Sofa Góc Nỉ Nhung',
-    'Phòng Ngủ Kiểu Nhật',
+    'Sofa Nỉ Nhung',
+    'Phòng Ngủ Tối Giản',
   ];
 
-  const searchResults = MOCK_PRODUCTS.filter((prod) => {
+  const searchResults = allProducts.filter((prod) => {
     if (!query.trim()) return false;
-    const q = query.toLowerCase();
+    const q = query.toLowerCase().trim();
     return (
-      prod.title.toLowerCase().includes(q) ||
-      prod.category.toLowerCase().includes(q) ||
+      (prod.title && prod.title.toLowerCase().includes(q)) ||
+      (prod.category && prod.category.toLowerCase().includes(q)) ||
+      (prod.brand && prod.brand.toLowerCase().includes(q)) ||
       (prod.description && prod.description.toLowerCase().includes(q))
     );
   });
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header Search Input */}
+      {/* Header Search Input with Fixed Icon Padding */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
@@ -48,25 +69,31 @@ export default function SearchScreen() {
         </TouchableOpacity>
 
         <View style={styles.inputWrapper}>
-          <Feather name="search" size={18} color="#6E6860" />
+          <View style={styles.searchIconBox}>
+            <Feather name="search" size={17} color="#8A6A48" />
+          </View>
           <TextInput
             style={styles.searchInput}
-            placeholder="Tìm kiếm bàn gỗ sồi, sofa da, vải bouclé..."
-            placeholderTextColor="#6E6860"
+            placeholder="Tìm bàn gỗ sồi, sofa da, đèn thả..."
+            placeholderTextColor="#A0988E"
             value={query}
             onChangeText={setQuery}
             autoFocus
           />
           {query.length > 0 && (
-            <TouchableOpacity onPress={() => setQuery('')}>
-              <Feather name="x" size={18} color="#6E6860" />
+            <TouchableOpacity onPress={() => setQuery('')} style={styles.clearBtn}>
+              <Feather name="x" size={16} color="#6E6860" />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
       <View style={styles.content}>
-        {query.trim().length === 0 ? (
+        {loading ? (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="small" color="#8A6A48" />
+          </View>
+        ) : query.trim().length === 0 ? (
           <View>
             <Text style={styles.sectionTitle}>TÌM KIẾM PHỔ BIẾN</Text>
             <View style={styles.tagGroup}>
@@ -96,25 +123,26 @@ export default function SearchScreen() {
             data={searchResults}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingBottom: 40 }}
+            showsVerticalScrollIndicator={false}
             renderItem={({ item }) => (
               <TouchableOpacity
-                onPress={() => router.push(`/(customer)/product/${item.id}`)}
+                onPress={() => router.push(`/(customer)/product/${item.id}` as any)}
                 style={styles.resultCard}
                 activeOpacity={0.88}
               >
                 <Image source={{ uri: item.image }} style={styles.resultImage} />
                 <View style={styles.resultInfo}>
-                  <Text style={styles.resultCategory}>{item.category}</Text>
-                  <Text style={styles.resultTitle}>{item.title}</Text>
+                  <Text style={styles.resultCategory}>{item.brand || item.category}</Text>
+                  <Text style={styles.resultTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
                   <View style={styles.ratingRow}>
                     <Ionicons name="star" size={12} color="#C89D5C" />
-                    <Text style={styles.ratingText}>{item.rating}</Text>
+                    <Text style={styles.ratingText}>{item.rating || 4.9}</Text>
                   </View>
-                  <Text style={styles.resultPrice}>
-                    ${item.price.toLocaleString()}
-                  </Text>
+                  <Text style={styles.resultPrice}>{formatCurrency(item.price)}</Text>
                 </View>
-                <Feather name="chevron-right" size={18} color="#6E6860" />
+                <Feather name="chevron-right" size={18} color="#C2B8A3" />
               </TouchableOpacity>
             )}
           />
@@ -128,6 +156,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F7F4EE',
+  },
+  centerContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -146,6 +178,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  // Ô nhập liệu fix triệt để khoảng cách padding icon
   inputWrapper: {
     flex: 1,
     height: 44,
@@ -153,15 +186,25 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     borderColor: '#E2DBD0',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+  },
+  searchIconBox: {
+    width: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     color: '#252525',
+    paddingVertical: 0,
+    height: '100%',
+  },
+  clearBtn: {
+    padding: 6,
   },
   content: {
     flex: 1,
@@ -223,26 +266,28 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   resultImage: {
-    width: 70,
-    height: 70,
+    width: 68,
+    height: 68,
     borderRadius: 10,
     backgroundColor: '#F7F4EE',
   },
   resultInfo: {
     flex: 1,
-    marginLeft: 14,
+    marginLeft: 12,
   },
   resultCategory: {
     fontSize: 10,
-    color: '#6E6860',
+    color: '#8A6A48',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
+    fontWeight: '700',
   },
   resultTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#252525',
     marginVertical: 2,
+    lineHeight: 18,
   },
   ratingRow: {
     flexDirection: 'row',
