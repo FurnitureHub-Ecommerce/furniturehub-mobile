@@ -32,12 +32,13 @@ export default function AddressScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Form states
+  // Form states khớp 100% Swagger API
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
-  const [fullName, setFullName] = useState('');
+  const [receiverName, setReceiverName] = useState('');
   const [phone, setPhone] = useState('');
-  const [street, setStreet] = useState('');
+  const [addressLine, setAddressLine] = useState('');
+  const [ward, setWard] = useState('');
   const [city, setCity] = useState('');
   const [isDefault, setIsDefault] = useState(false);
 
@@ -61,10 +62,11 @@ export default function AddressScreen() {
   const openAddModal = () => {
     setEditingId(null);
     setTitle('Nhà Riêng');
-    setFullName('');
+    setReceiverName('');
     setPhone('');
-    setStreet('');
-    setCity('TP. Hồ Chí Minh');
+    setAddressLine('');
+    setWard('Phường Bến Nghé');
+    setCity('Hồ Chí Minh');
     setIsDefault(addresses.length === 0);
     setModalVisible(true);
   };
@@ -72,28 +74,33 @@ export default function AddressScreen() {
   const openEditModal = (item: AddressItem) => {
     setEditingId(item._id || item.id || null);
     setTitle(item.title || 'Nhà Riêng');
-    setFullName(item.fullName || item.name || '');
-    setPhone(item.phone || '');
-    setStreet(item.street || item.address || '');
-    setCity(item.city || 'TP. Hồ Chí Minh');
+    setReceiverName(item.receiverName || item.fullName || item.name || '');
+    setPhone(item.phone || item.phoneNumber || '');
+    setAddressLine(item.addressLine || item.street || item.address || '');
+    setWard(item.ward || 'Phường Bến Nghé');
+    setCity(item.city || 'Hồ Chí Minh');
     setIsDefault(!!item.isDefault);
     setModalVisible(true);
   };
 
   const handleSaveAddress = async () => {
-    if (!fullName.trim() || !phone.trim() || !street.trim()) {
-      Alert.alert('Thiếu thông tin', 'Vui lòng điền đầy đủ họ tên, số điện thoại và địa chỉ nhận hàng.');
+    if (!receiverName.trim() || !phone.trim() || !addressLine.trim() || !ward.trim() || !city.trim()) {
+      Alert.alert(
+        'Thiếu thông tin',
+        'Vui lòng điền đầy đủ Tên người nhận, Số điện thoại, Địa chỉ chi tiết, Phường/Xã và Tỉnh/Thành phố.'
+      );
       return;
     }
 
     const payload: AddressItem = {
       title: title.trim() || 'Địa chỉ giao hàng',
-      fullName: fullName.trim(),
-      name: fullName.trim(),
+      receiverName: receiverName.trim(),
+      fullName: receiverName.trim(),
       phone: phone.trim(),
-      street: street.trim(),
-      address: street.trim(),
-      city: city.trim() || 'TP. Hồ Chí Minh',
+      addressLine: addressLine.trim(),
+      street: addressLine.trim(),
+      ward: ward.trim(),
+      city: city.trim(),
       isDefault,
     };
 
@@ -103,17 +110,13 @@ export default function AddressScreen() {
 
       if (editingId) {
         await updateAddressApi(editingId, payload, token || undefined);
-        setAddresses((prev) =>
-          prev.map((a) => ((a._id || a.id) === editingId ? { ...a, ...payload } : a))
-        );
         Alert.alert('Thành Công', 'Đã cập nhật địa chỉ giao hàng.');
       } else {
-        const newAddr = await createAddressApi(payload, token || undefined);
-        const itemCreated = newAddr.data || newAddr.address || { ...payload, id: `addr-${Date.now()}` };
-        setAddresses((prev) => [itemCreated, ...prev]);
+        await createAddressApi(payload, token || undefined);
         Alert.alert('Thành Công', 'Đã lưu địa chỉ giao hàng mới.');
       }
 
+      await fetchAddresses();
       setModalVisible(false);
     } catch (err: any) {
       Alert.alert('Thông báo', err.message || 'Không thể lưu địa chỉ vào lúc này.');
@@ -205,6 +208,15 @@ export default function AddressScreen() {
           ) : (
             addresses.map((item) => {
               const itemId = item._id || item.id;
+              const nameDisplay = item.receiverName || item.fullName || item.name;
+              const addrDisplay = [
+                item.addressLine || item.street || item.address,
+                item.ward,
+                item.city,
+              ]
+                .filter(Boolean)
+                .join(', ');
+
               return (
                 <View key={itemId} style={styles.addressCard}>
                   <View style={styles.cardHeader}>
@@ -220,10 +232,9 @@ export default function AddressScreen() {
                   </View>
 
                   <Text style={styles.nameText}>
-                    {item.fullName || item.name} • {item.phone}
+                    {nameDisplay} • {item.phone}
                   </Text>
-                  <Text style={styles.streetText}>{item.street || item.address}</Text>
-                  <Text style={styles.cityText}>{item.city}</Text>
+                  <Text style={styles.streetText}>{addrDisplay}</Text>
 
                   <View style={styles.actionRow}>
                     <TouchableOpacity
@@ -262,7 +273,7 @@ export default function AddressScreen() {
         </ScrollView>
       )}
 
-      {/* Modal Thêm / Chỉnh Sửa Địa Chỉ với Input Icon Padding Chuẩn */}
+      {/* Modal Thêm / Chỉnh Sửa Địa Chỉ */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -281,15 +292,15 @@ export default function AddressScreen() {
           </View>
 
           <ScrollView contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
-            {/* Tên gọi gợi nhớ */}
-            <Text style={styles.modalLabel}>TÊN GỢI NHỚ (VD: Nhà Riêng, Biệt Thự Malibu)</Text>
+            {/* Tên gợi nhớ */}
+            <Text style={styles.modalLabel}>TÊN GỢI NHỚ (VD: Nhà Riêng, Văn Phòng)</Text>
             <View style={styles.modalInputWrapper}>
               <View style={styles.modalIconBox}>
                 <Feather name="bookmark" size={17} color="#8A6A48" />
               </View>
               <TextInput
                 style={styles.modalTextInput}
-                placeholder="Nhà Riêng / Căn Hộ..."
+                placeholder="Nhà Riêng / Văn Phòng..."
                 placeholderTextColor="#A0988E"
                 value={title}
                 onChangeText={setTitle}
@@ -297,29 +308,29 @@ export default function AddressScreen() {
             </View>
 
             {/* Họ tên người nhận */}
-            <Text style={styles.modalLabel}>HỌ VÀ TÊN NGƯỜI NHẬN</Text>
+            <Text style={styles.modalLabel}>HỌ VÀ TÊN NGƯỜI NHẬN (receiverName)</Text>
             <View style={styles.modalInputWrapper}>
               <View style={styles.modalIconBox}>
                 <Feather name="user" size={17} color="#8A6A48" />
               </View>
               <TextInput
                 style={styles.modalTextInput}
-                placeholder="Nguyễn Văn A"
+                placeholder="Nguyen Van A"
                 placeholderTextColor="#A0988E"
-                value={fullName}
-                onChangeText={setFullName}
+                value={receiverName}
+                onChangeText={setReceiverName}
               />
             </View>
 
             {/* Số điện thoại */}
-            <Text style={styles.modalLabel}>SỐ ĐIỆN THOẠI</Text>
+            <Text style={styles.modalLabel}>SỐ ĐIỆN THOẠI (phone)</Text>
             <View style={styles.modalInputWrapper}>
               <View style={styles.modalIconBox}>
                 <Feather name="phone" size={17} color="#8A6A48" />
               </View>
               <TextInput
                 style={styles.modalTextInput}
-                placeholder="0901 234 567"
+                placeholder="0912345678"
                 placeholderTextColor="#A0988E"
                 keyboardType="phone-pad"
                 value={phone}
@@ -327,30 +338,45 @@ export default function AddressScreen() {
               />
             </View>
 
-            {/* Số nhà, tên đường */}
-            <Text style={styles.modalLabel}>ĐỊA CHỈ CHI TIẾT (SỐ NHÀ, ĐƯỜNG, PHƯỜNG/XÃ)</Text>
+            {/* Địa chỉ chi tiết */}
+            <Text style={styles.modalLabel}>SỐ NHÀ & ĐƯỜNG (addressLine)</Text>
             <View style={styles.modalInputWrapper}>
               <View style={styles.modalIconBox}>
                 <Feather name="map-pin" size={17} color="#8A6A48" />
               </View>
               <TextInput
                 style={styles.modalTextInput}
-                placeholder="123 Đường Lê Lợi, Phường Bến Thành, Quận 1"
+                placeholder="123 Đường Lê Lợi"
                 placeholderTextColor="#A0988E"
-                value={street}
-                onChangeText={setStreet}
+                value={addressLine}
+                onChangeText={setAddressLine}
+              />
+            </View>
+
+            {/* Phường / Xã */}
+            <Text style={styles.modalLabel}>PHƯỜNG / XÃ (ward)</Text>
+            <View style={styles.modalInputWrapper}>
+              <View style={styles.modalIconBox}>
+                <Feather name="navigation" size={17} color="#8A6A48" />
+              </View>
+              <TextInput
+                style={styles.modalTextInput}
+                placeholder="Phường Bến Nghé"
+                placeholderTextColor="#A0988E"
+                value={ward}
+                onChangeText={setWard}
               />
             </View>
 
             {/* Tỉnh / Thành phố */}
-            <Text style={styles.modalLabel}>TỈNH / THÀNH PHỐ</Text>
+            <Text style={styles.modalLabel}>TỈNH / THÀNH PHỐ (city)</Text>
             <View style={styles.modalInputWrapper}>
               <View style={styles.modalIconBox}>
                 <Feather name="compass" size={17} color="#8A6A48" />
               </View>
               <TextInput
                 style={styles.modalTextInput}
-                placeholder="TP. Hồ Chí Minh"
+                placeholder="Hồ Chí Minh"
                 placeholderTextColor="#A0988E"
                 value={city}
                 onChangeText={setCity}
@@ -473,10 +499,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2DBD0',
     marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
     elevation: 1,
   },
   cardHeader: {
@@ -516,10 +538,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6E6860',
     lineHeight: 18,
-  },
-  cityText: {
-    fontSize: 13,
-    color: '#6E6860',
     marginBottom: 12,
   },
   actionRow: {
@@ -550,7 +568,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#D93838',
   },
-  // Modal styles with fixed input icon padding
   modalContainer: {
     flex: 1,
     backgroundColor: '#F7F4EE',
@@ -582,7 +599,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     marginTop: 10,
   },
-  // Ô nhập liệu fix triệt để khoảng cách padding icon
   modalInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -598,7 +614,7 @@ const styles = StyleSheet.create({
     width: 26,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10, // Khoảng cách giữa icon và chữ nhập
+    marginRight: 10,
   },
   modalTextInput: {
     flex: 1,
@@ -631,10 +647,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 12,
-    shadowColor: '#8A6A48',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
     elevation: 3,
   },
   saveModalBtnText: {

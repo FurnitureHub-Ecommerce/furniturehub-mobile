@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import {
   StyleSheet,
   Text,
@@ -7,19 +13,28 @@ import {
   ScrollView,
   Image,
   Dimensions,
-  Platform,
   FlatList,
   Animated,
   SafeAreaView,
-  StatusBar,
   Alert,
-} from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Feather, Ionicons } from '@expo/vector-icons';
-import { useApp } from '@/context/AppContext';
-import { getProductDetailApi, getReviewsApi, ReviewItem, formatCurrency } from '@/services/api';
+  ActivityIndicator,
+  Platform,
+} from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { useApp } from "@/context/AppContext";
+import {
+  getProductDetailApi,
+  getProductVariantsApi,
+  getVariantDetailApi,
+  getReviewsApi,
+  ReviewItem,
+  formatCurrency,
+} from "@/services/api";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
+const IMAGE_HEIGHT = 380;
 
 export default function ProductDetailScreen() {
   const router = useRouter();
@@ -27,145 +42,170 @@ export default function ProductDetailScreen() {
   const { addToCart, wishlistIds, toggleWishlist, cartCount } = useApp();
 
   const [product, setProduct] = useState<any>(null);
+  const [variants, setVariants] = useState<any[]>([]);
+  const [selectedVariant, setSelectedVariant] = useState<any>(null);
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Gọi API lấy chi tiết sản phẩm và đánh giá theo id
-  useEffect(() => {
-    const fetchProductData = async () => {
-      try {
-        setIsLoading(true);
-        if (!id) return;
-        const [productData, reviewsData] = await Promise.all([
-          getProductDetailApi(id),
-          getReviewsApi(id),
-        ]);
-
-        const item = productData.data || productData;
-        setProduct({
-          id: item._id || item.id,
-          title: item.name || item.title,
-          price: item.minPrice || item.price || 0,
-          originalPrice: item.originalPrice,
-          images: item.images && item.images.length > 0 ? item.images : [item.image || "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?q=80&w=600"],
-          image: item.images?.[0] || item.image || "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?q=80&w=600",
-          category: item.categoryName || item.category || "Nội Thất",
-          brand: item.brandId?.name || item.brand || "LUMORA",
-          rating: item.rating || 4.9,
-          reviewCount: item.reviewCount || 12,
-          tag: item.tag,
-          description: item.description || "Thiết kế nội thất cao cấp mang lại nét đẹp tối giản đương đại.",
-          colors: item.colors || [],
-          options: item.options || [],
-          variantStocks: item.variantStocks || [],
-          dimensions: item.dimensions,
-          material: item.material,
-        });
-
-        setReviews(reviewsData);
-      } catch (error) {
-        console.warn("Lỗi tải chi tiết sản phẩm:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchProductData();
-  }, [id]);
-
-  if (isLoading || !product) {
-    return (
-      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <StatusBar barStyle="dark-content" backgroundColor="#F7F4EE" />
-        <Text style={{ color: '#8A6A48', fontWeight: '600' }}>Đang tải chi tiết sản phẩm...</Text>
-      </SafeAreaView>
-    );
-  }
-
-  const isWishlisted = wishlistIds.has(product.id);
-
-  const galleryImages = product.images && product.images.length > 0 ? product.images : [product.image];
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const galleryFlatListRef = useRef<FlatList>(null);
-
-  const [selectedColor, setSelectedColor] = useState<any>(product.colors?.[0]);
-  const [selectedOption, setSelectedOption] = useState<any>(product.options?.[0]);
   const [quantity, setQuantity] = useState(1);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
 
-  const currentVariantStock = useMemo(() => {
-    if (!product.variantStocks || product.variantStocks.length === 0) {
-      return { inStock: true, stockCount: 10 };
-    }
-    const match = product.variantStocks.find((s: any) => {
-      const colorMatch = s.colorId === selectedColor?.id;
-      const optionMatch = !selectedOption || s.optionId === selectedOption?.id;
-      return colorMatch && optionMatch;
-    });
-    return match || { inStock: false, stockCount: 0 };
-  }, [product.variantStocks, selectedColor, selectedOption]);
+  // Lấy dữ liệu sản phẩm & variants từ Backend
+  useEffect(() => {
+    let isMounted = true;
 
-  const isColorInStock = useCallback(
-    (colorId: string) => {
-      if (!product.variantStocks) return true;
-      return product.variantStocks.some(
-        (s: any) => s.colorId === colorId && s.inStock && s.stockCount > 0
-      );
-    },
-    [product.variantStocks]
-  );
-
-  const isOptionInStock = useCallback(
-    (optionId: string) => {
-      if (!product.variantStocks) return true;
-      return product.variantStocks.some((s: any) => {
-        const colorMatch = !selectedColor || s.colorId === selectedColor.id;
-        return colorMatch && s.optionId === optionId && s.inStock && s.stockCount > 0;
-      });
-    },
-    [product.variantStocks, selectedColor]
-  );
-
-  const dynamicPrice = useMemo(() => {
-    const adjustment = selectedOption?.priceAdjustment || 0;
-    return product.price + adjustment;
-  }, [product.price, selectedOption]);
-
-  const handleSelectColor = useCallback(
-    (color: any) => {
-      setSelectedColor(color);
-      setQuantity(1);
-
-      const colorImgIndex = galleryImages.findIndex(
-        (img: string) => img === color.image || img.includes(color.hex)
-      );
-
-      if (colorImgIndex !== -1 && galleryFlatListRef.current) {
-        galleryFlatListRef.current.scrollToIndex({
-          index: colorImgIndex,
-          animated: true,
-        });
-        setActiveImageIndex(colorImgIndex);
+    const fetchAllData = async () => {
+      if (!id || id === "undefined") {
+        setIsLoading(false);
+        setErrorMessage("Mã sản phẩm không hợp lệ.");
+        return;
       }
-    },
-    [galleryImages]
-  );
 
-  const handleSelectOption = useCallback((option: any) => {
-    setSelectedOption(option);
-    setQuantity(1);
-  }, []);
+      try {
+        setIsLoading(true);
+        setErrorMessage(null);
+
+        const [prodRes, variantsRes] = await Promise.all([
+          getProductDetailApi(id),
+          getProductVariantsApi(id).catch(() => []),
+        ]);
+
+        const rawProd = prodRes?.product || prodRes?.data?.product || prodRes?.data || prodRes;
+        if (!rawProd || (!rawProd._id && !rawProd.id)) {
+          if (isMounted) setErrorMessage("Không tìm thấy thông tin sản phẩm trên hệ thống.");
+          return;
+        }
+
+        let variantList: any[] = Array.isArray(variantsRes)
+          ? variantsRes
+          : variantsRes?.data || variantsRes?.variants || [];
+
+        if (variantList.length > 0 && typeof variantList[0] === "string") {
+          const detailPromises = variantList.map((vId) =>
+            getVariantDetailApi(vId).catch(() => null)
+          );
+          const fullVariants = await Promise.all(detailPromises);
+          variantList = fullVariants.filter(Boolean).map((v) => v?.data || v);
+        }
+
+        const activeVariants = variantList.filter((v: any) => v && v.isActive !== false);
+
+        const realImages =
+          Array.isArray(rawProd.images) && rawProd.images.length > 0
+            ? rawProd.images
+            : rawProd.imageUrl || rawProd.image
+            ? [rawProd.imageUrl || rawProd.image]
+            : [];
+
+        const parsedProd = {
+          ...rawProd,
+          id: rawProd._id || rawProd.id,
+          title: rawProd.name || rawProd.title || "Sản phẩm nội thất",
+          description: rawProd.description || "",
+          images: realImages,
+          category: rawProd.categoryId?.name || rawProd.categoryName || "",
+          brand: rawProd.brandId?.name || rawProd.brandName || "LUMORA",
+          availableStock: rawProd.availableStock ?? 0,
+        };
+
+        if (isMounted) {
+          setProduct(parsedProd);
+          setVariants(activeVariants);
+          if (activeVariants.length > 0) {
+            setSelectedVariant(activeVariants[0]);
+          }
+        }
+
+        try {
+          const revs = await getReviewsApi(id);
+          if (isMounted) {
+            setReviews(Array.isArray(revs) ? revs : []);
+          }
+        } catch {
+          // Bỏ qua nếu chưa có review
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setErrorMessage(err.message || "Lỗi khi tải dữ liệu từ server.");
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    fetchAllData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+  // Kiểm tra sản phẩm hoặc biến thể đang chọn có hết hàng không
+  const isOutOfStock = useMemo(() => {
+    if (selectedVariant) {
+      if (selectedVariant.stockCount !== undefined && Number(selectedVariant.stockCount) <= 0) return true;
+      if (selectedVariant.quantity !== undefined && Number(selectedVariant.quantity) <= 0) return true;
+      if (selectedVariant.availableStock !== undefined && Number(selectedVariant.availableStock) <= 0) return true;
+      if (selectedVariant.isActive === false) return true;
+    }
+    if (product?.availableStock !== undefined && Number(product.availableStock) <= 0) {
+      return true;
+    }
+    return false;
+  }, [selectedVariant, product]);
+
+  // Số lượng kho còn lại khả dụng
+  const availableStockCount = useMemo(() => {
+    if (selectedVariant) {
+      return selectedVariant.stockCount ?? selectedVariant.quantity ?? selectedVariant.availableStock ?? product?.availableStock ?? 0;
+    }
+    return product?.availableStock ?? 0;
+  }, [selectedVariant, product]);
+
+  const currentPrice = useMemo(() => {
+    if (selectedVariant && selectedVariant.price !== undefined) {
+      return Number(selectedVariant.price);
+    }
+    return Number(product?.price || 0);
+  }, [selectedVariant, product]);
+
+  const currentMaterial = useMemo(() => {
+    return selectedVariant?.material || product?.material || null;
+  }, [selectedVariant, product]);
+
+  const currentSize = useMemo(() => {
+    return selectedVariant?.size || product?.dimensions || null;
+  }, [selectedVariant, product]);
+
+  const currentColor = useMemo(() => {
+    return selectedVariant?.color || null;
+  }, [selectedVariant]);
+
+  const isWishlisted = useMemo(() => {
+    return product?.id ? wishlistIds.has(product.id) : false;
+  }, [product?.id, wishlistIds]);
+
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    Animated.sequence([
+      Animated.timing(toastOpacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+      Animated.delay(2200),
+      Animated.timing(toastOpacity, { toValue: 0, duration: 250, useNativeDriver: true }),
+    ]).start();
+  }, [toastOpacity]);
 
   const handleIncreaseQty = useCallback(() => {
-    if (quantity < (currentVariantStock.stockCount || 10)) {
+    if (quantity < availableStockCount) {
       setQuantity((prev) => prev + 1);
     } else {
-      showToast('Đã đạt số lượng tối đa có thể đặt');
+      showToast("Đã đạt số lượng tồn kho tối đa");
     }
-  }, [quantity, currentVariantStock]);
+  }, [quantity, availableStockCount, showToast]);
 
   const handleDecreaseQty = useCallback(() => {
     if (quantity > 1) {
@@ -173,40 +213,43 @@ export default function ProductDetailScreen() {
     }
   }, [quantity]);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    Animated.sequence([
-      Animated.timing(toastOpacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.delay(2000),
-      Animated.timing(toastOpacity, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  const handleAddToCart = useCallback(() => {
-    if (!currentVariantStock.inStock) {
-      Alert.alert('Hết Hàng', 'Sản phẩm thuộc biến thể này hiện đang tạm hết hàng.');
+  const handleAddToCart = useCallback(async () => {
+    if (isOutOfStock) {
+      Alert.alert("Thông báo", "Sản phẩm này hiện đã hết hàng.");
       return;
     }
-    addToCart(product, quantity, selectedColor, selectedOption);
-    showToast(`Đã thêm (${quantity}) "${product.title}" vào giỏ hàng`);
-  }, [currentVariantStock, addToCart, product, quantity, selectedColor, selectedOption]);
+
+    const success = await addToCart(
+      product,
+      quantity,
+      selectedVariant
+        ? { id: selectedVariant._id || selectedVariant.id, name: selectedVariant.sku || selectedVariant.color }
+        : null,
+      null
+    );
+    if (success) {
+      showToast(`Đã thêm (${quantity}) "${product.title}" vào giỏ hàng`);
+    } else {
+      Alert.alert("Thông báo", "Không thể thêm vào giỏ hàng.");
+    }
+  }, [addToCart, product, quantity, selectedVariant, isOutOfStock, showToast]);
 
   const handleBuyNow = useCallback(() => {
-    if (!currentVariantStock.inStock) {
-      Alert.alert('Hết Hàng', 'Sản phẩm thuộc biến thể này hiện đang tạm hết hàng.');
+    if (isOutOfStock) {
+      Alert.alert("Thông báo", "Sản phẩm này hiện đã hết hàng.");
       return;
     }
-    addToCart(product, quantity, selectedColor, selectedOption);
-    router.push('/(customer)/checkout' as any);
-  }, [currentVariantStock, addToCart, product, quantity, selectedColor, selectedOption, router]);
+
+    addToCart(
+      product,
+      quantity,
+      selectedVariant
+        ? { id: selectedVariant._id || selectedVariant.id, name: selectedVariant.sku || selectedVariant.color }
+        : null,
+      null
+    );
+    router.push("/(customer)/checkout" as any);
+  }, [addToCart, product, quantity, selectedVariant, isOutOfStock, router]);
 
   const onGalleryScroll = useCallback((event: any) => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
@@ -214,980 +257,1001 @@ export default function ProductDetailScreen() {
     setActiveImageIndex(index);
   }, []);
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F7F4EE" />
-
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.headerIconBtn}
-          activeOpacity={0.7}
-        >
-          <Feather name="arrow-left" size={20} color="#252525" />
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {product.brand}
-        </Text>
-
-        <View style={styles.headerRight}>
-          <TouchableOpacity
-            onPress={() => toggleWishlist(product.id)}
-            style={styles.headerIconBtn}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name={isWishlisted ? 'heart' : 'heart-outline'}
-              size={20}
-              color={isWishlisted ? '#D93838' : '#252525'}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => router.push('/(customer)/cart' as any)}
-            style={styles.headerIconBtn}
-            activeOpacity={0.7}
-          >
-            <Feather name="shopping-bag" size={18} color="#252525" />
-            {cartCount > 0 && (
-              <View style={styles.cartBadge}>
-                <Text style={styles.cartBadgeText}>{cartCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
+  if (isLoading) {
+    return (
+      <View style={styles.root}>
+        <StatusBar style="dark" />
+        <SafeAreaView style={[styles.container, styles.centerContainer]}>
+          <ActivityIndicator size="large" color="#8A6A48" />
+          <Text style={styles.loadingText}>Đang tải chi tiết sản phẩm...</Text>
+        </SafeAreaView>
       </View>
+    );
+  }
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.galleryContainer}>
-          <FlatList
-            ref={galleryFlatListRef}
-            data={galleryImages}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onScroll={onGalleryScroll}
-            scrollEventThrottle={16}
-            keyExtractor={(_, index) => index.toString()}
-            renderItem={({ item }) => (
-              <View style={styles.gallerySlide}>
-                <Image source={{ uri: item }} style={styles.galleryImage} />
-              </View>
-            )}
-          />
+  if (errorMessage || !product) {
+    return (
+      <View style={styles.root}>
+        <StatusBar style="dark" />
+        <SafeAreaView style={[styles.container, styles.centerContainer]}>
+          <Feather name="alert-circle" size={48} color="#D93838" />
+          <Text style={styles.errorTitle}>Lỗi tải dữ liệu</Text>
+          <Text style={styles.errorSub}>{errorMessage}</Text>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Text style={styles.backBtnText}>Quay Lại</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      </View>
+    );
+  }
 
-          <View style={styles.galleryCounterBadge}>
-            <Text style={styles.galleryCounterText}>
-              {activeImageIndex + 1} / {galleryImages.length}
-            </Text>
-          </View>
+  return (
+    <View style={styles.root}>
+      <StatusBar style="dark" />
 
-          <View style={styles.paginationDotsRow}>
-            {galleryImages.map((_ : string, idx: number) => (
-              <View
-                key={idx}
-                style={[
-                  styles.paginationDot,
-                  activeImageIndex === idx && styles.paginationDotActive,
-                ]}
+      {/* Floating Top Nav Bar */}
+      <SafeAreaView style={styles.floatingHeaderArea}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.headerIconBtn}
+            activeOpacity={0.8}
+          >
+            <Feather name="arrow-left" size={20} color="#252525" />
+          </TouchableOpacity>
+
+          <View style={styles.headerRightGroup}>
+            <TouchableOpacity
+              onPress={() => toggleWishlist(product.id)}
+              style={styles.headerIconBtn}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={isWishlisted ? "heart" : "heart-outline"}
+                size={20}
+                color={isWishlisted ? "#D93838" : "#252525"}
               />
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.detailsSection}>
-          <View style={styles.brandRow}>
-            <Text style={styles.brandText}>{product.brand}</Text>
-            <View style={styles.verifiedBadge}>
-              <Ionicons name="checkmark-circle" size={13} color="#8A6A48" />
-              <Text style={styles.verifiedText}>Chính Hãng</Text>
-            </View>
-          </View>
-
-          <Text style={styles.titleText}>{product.title}</Text>
-
-          <View style={styles.ratingRow}>
-            <View style={styles.starGroup}>
-              <Ionicons name="star" size={15} color="#C89D5C" />
-              <Text style={styles.ratingScore}>{product.rating.toFixed(1)}</Text>
-            </View>
-            <Text style={styles.reviewCount}>({product.reviewCount} Đánh giá)</Text>
-            <View style={styles.dividerDot} />
-            <Text style={styles.categoryName}>{product.category}</Text>
-          </View>
-
-          <View style={styles.priceRow}>
-            <Text style={styles.dynamicPrice}>${dynamicPrice.toLocaleString()}</Text>
-            {product.originalPrice && (
-              <Text style={styles.originalPrice}>
-                ${product.originalPrice.toLocaleString()}
-              </Text>
-            )}
-            {product.tag && (
-              <View style={styles.tagBadge}>
-                <Text style={styles.tagBadgeText}>{product.tag}</Text>
-              </View>
-            )}
-          </View>
-
-          {product.description && (
-            <Text style={styles.descriptionText}>{product.description}</Text>
-          )}
-
-          {product.colors && product.colors.length > 0 && (
-            <View style={styles.variantSection}>
-              <View style={styles.variantHeader}>
-                <Text style={styles.variantLabel}>Màu Sắc:</Text>
-                <Text style={styles.variantValue}>{selectedColor?.name}</Text>
-              </View>
-
-              <View style={styles.colorSwatchesRow}>
-                {product.colors.map((c: any) => {
-                  const isSelected = selectedColor?.id === c.id;
-                  const inStock = isColorInStock(c.id);
-
-                  return (
-                    <TouchableOpacity
-                      key={c.id}
-                      onPress={() => handleSelectColor(c)}
-                      disabled={!inStock}
-                      style={[
-                        styles.colorSwatchContainer,
-                        isSelected && styles.colorSwatchActive,
-                        !inStock && styles.colorSwatchDisabled,
-                      ]}
-                      activeOpacity={0.8}
-                    >
-                      <View style={[styles.colorSwatchCircle, { backgroundColor: c.hex }]}>
-                        {isSelected && (
-                          <Feather
-                            name="check"
-                            size={14}
-                            color={c.hex === '#F5F2EB' || c.hex === '#E0C59E' || c.hex === '#E3CBB5' ? '#252525' : '#FFFFFF'}
-                          />
-                        )}
-                      </View>
-                      {!inStock && <View style={styles.disabledLine} />}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-
-          {product.options && product.options.length > 0 && (
-            <View style={styles.variantSection}>
-              <View style={styles.variantHeader}>
-                <Text style={styles.variantLabel}>Kích Thước / Option:</Text>
-                <Text style={styles.variantValue}>{selectedOption?.label}</Text>
-              </View>
-
-              <View style={styles.optionPillGroup}>
-                {product.options.map((opt: any) => {
-                  const isSelected = selectedOption?.id === opt.id;
-                  const inStock = isOptionInStock(opt.id);
-
-                  return (
-                    <TouchableOpacity
-                      key={opt.id}
-                      onPress={() => handleSelectOption(opt)}
-                      disabled={!inStock}
-                      style={[
-                        styles.optionPill,
-                        isSelected && styles.optionPillActive,
-                        !inStock && styles.optionPillDisabled,
-                      ]}
-                      activeOpacity={0.8}
-                    >
-                      <Text
-                        style={[
-                          styles.optionPillText,
-                          isSelected && styles.optionPillTextActive,
-                          !inStock && styles.optionPillTextDisabled,
-                        ]}
-                      >
-                        {opt.label}
-                        {opt.priceAdjustment > 0 ? ` (+$${opt.priceAdjustment})` : ''}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-
-          <View style={styles.stockQtyRow}>
-            <View style={styles.stockStatusBox}>
-              <Text style={styles.stockLabel}>Trạng thái kho:</Text>
-              {currentVariantStock.inStock ? (
-                <View style={styles.inStockBadge}>
-                  <Ionicons name="checkmark-circle" size={14} color="#27AE60" />
-                  <Text style={styles.inStockText}>
-                    Còn hàng
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.outOfStockBadge}>
-                  <Ionicons name="close-circle" size={14} color="#D93838" />
-                  <Text style={styles.outOfStockText}>Tạm hết hàng</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push("/(customer)/(tabs)/cart" as any)}
+              style={styles.headerIconBtn}
+              activeOpacity={0.8}
+            >
+              <Feather name="shopping-bag" size={18} color="#252525" />
+              {cartCount > 0 && (
+                <View style={styles.cartBadge}>
+                  <Text style={styles.cartBadgeText}>{cartCount}</Text>
                 </View>
               )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Gallery Trình Chiếu Ảnh */}
+        <View style={styles.galleryWrapper}>
+          {product.images?.length > 0 ? (
+            <FlatList
+              ref={galleryFlatListRef}
+              data={product.images}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onScroll={onGalleryScroll}
+              scrollEventThrottle={16}
+              keyExtractor={(_, index) => index.toString()}
+              renderItem={({ item }) => (
+                <View style={styles.slideBox}>
+                  <Image source={{ uri: item }} style={styles.slideImage} />
+                </View>
+              )}
+            />
+          ) : (
+            <View style={[styles.slideBox, styles.emptyImageBox]}>
+              <Feather name="image" size={48} color="#C2B8A3" />
             </View>
+          )}
 
-            {currentVariantStock.inStock && (
-              <View style={styles.qtyControlBox}>
-                <TouchableOpacity
-                  onPress={handleDecreaseQty}
-                  disabled={quantity <= 1}
-                  style={[styles.qtyBtn, quantity <= 1 && styles.qtyBtnDisabled]}
-                  activeOpacity={0.7}
-                >
-                  <Feather
-                    name="minus"
-                    size={14}
-                    color={quantity <= 1 ? '#C2B8A3' : '#252525'}
+          {/* Badge đếm ảnh & Dots Indicator */}
+          {product.images?.length > 1 && (
+            <>
+              <View style={styles.counterBadge}>
+                <Text style={styles.counterBadgeText}>
+                  {activeImageIndex + 1} / {product.images.length}
+                </Text>
+              </View>
+              <View style={styles.dotsRow}>
+                {product.images.map((_: any, idx: number) => (
+                  <View
+                    key={idx}
+                    style={[
+                      styles.dotItem,
+                      activeImageIndex === idx && styles.dotItemActive,
+                    ]}
                   />
-                </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+        </View>
 
-                <Text style={styles.qtyText}>{quantity}</Text>
+        {/* Nội dung chi tiết */}
+        <View style={styles.contentSheet}>
+          <View style={styles.tagLineRow}>
+            {product.brand ? (
+              <View style={styles.brandPill}>
+                <Ionicons name="sparkles" size={11} color="#8A6A48" />
+                <Text style={styles.brandPillText}>{product.brand}</Text>
+              </View>
+            ) : null}
 
-                <TouchableOpacity
-                  onPress={handleIncreaseQty}
-                  disabled={quantity >= currentVariantStock.stockCount}
-                  style={[
-                    styles.qtyBtn,
-                    quantity >= currentVariantStock.stockCount && styles.qtyBtnDisabled,
-                  ]}
-                  activeOpacity={0.7}
-                >
-                  <Feather
-                    name="plus"
-                    size={14}
-                    color={quantity >= currentVariantStock.stockCount ? '#C2B8A3' : '#252525'}
-                  />
-                </TouchableOpacity>
+            {product.category ? (
+              <Text style={styles.categoryBadgeText}>{product.category}</Text>
+            ) : null}
+          </View>
+
+          <Text style={styles.productTitle}>{product.title}</Text>
+
+          <View style={styles.priceRow}>
+            <View>
+              <Text style={styles.priceLabel}>Giá niêm yết</Text>
+              <Text style={styles.productPrice}>{formatCurrency(currentPrice)}</Text>
+            </View>
+            {selectedVariant?.sku && (
+              <View style={styles.skuBox}>
+                <Text style={styles.skuLabel}>MÃ SẢN PHẨM</Text>
+                <Text style={styles.skuCode}>{selectedVariant.sku}</Text>
               </View>
             )}
           </View>
 
-          <View style={styles.specsCard}>
-            <Text style={styles.specsCardTitle}>THÔNG SỐ KỸ THUẬT</Text>
-            {product.dimensions && (
-              <View style={styles.specRow}>
-                <Text style={styles.specLabel}>Kích thước tổng thể:</Text>
-                <Text style={styles.specValue}>{product.dimensions}</Text>
-              </View>
-            )}
-            {product.material && (
-              <View style={styles.specRow}>
-                <Text style={styles.specLabel}>Chất liệu cấu tạo:</Text>
-                <Text style={styles.specValue}>{product.material}</Text>
-              </View>
-            )}
-            <View style={styles.specRow}>
-              <Text style={styles.specLabel}>Bảo hành chính hãng:</Text>
-              <Text style={styles.specValue}>10 Năm Khung Gỗ</Text>
-            </View>
-          </View>
+          <View style={styles.thinDivider} />
 
-          {/* Section Đánh Giá & Nhận Xét của Khách Hàng */}
-          <View style={styles.reviewsSection}>
-            <View style={styles.reviewsHeaderRow}>
-              <View>
-                <Text style={styles.reviewsSectionTitle}>ĐÁNH GIÁ TỪ KHÁCH HÀNG</Text>
-                <View style={styles.ratingOverviewRow}>
-                  <Ionicons name="star" size={16} color="#DDAB61" />
-                  <Text style={styles.ratingNumber}>
-                    {product.rating ? Number(product.rating).toFixed(1) : '4.9'}
-                  </Text>
-                  <Text style={styles.ratingCount}>
-                    ({reviews.length || product.reviewCount || 12} nhận xét)
-                  </Text>
-                </View>
+          {/* Chọn Biến Thể / Phiên Bản */}
+          {variants.length > 0 && (
+            <View style={styles.sectionBlock}>
+              <View style={styles.sectionTitleRow}>
+                <Text style={styles.sectionTitle}>TÙY CHỌN PHIÊN BẢN</Text>
               </View>
 
-              <TouchableOpacity
-                onPress={() =>
-                  router.push(
-                    `/(customer)/review?productId=${product.id}&productTitle=${encodeURIComponent(
-                      product.title
-                    )}&productImage=${encodeURIComponent(product.image)}` as any
-                  )
-                }
-                style={styles.writeReviewBtn}
-                activeOpacity={0.8}
-              >
-                <Feather name="edit-3" size={13} color="#FFFFFF" />
-                <Text style={styles.writeReviewBtnText}>Viết Đánh Giá</Text>
-              </TouchableOpacity>
-            </View>
+              <View style={styles.variantsGrid}>
+                {variants.map((v: any, index: number) => {
+                  const vId = v._id || v.id || `variant-${index}`;
+                  const isSelected = (selectedVariant?._id || selectedVariant?.id) === vId;
+                  const label = [v.color, v.size].filter(Boolean).join(" - ") || v.sku || `Bản ${index + 1}`;
 
-            {/* Danh sách các review */}
-            {reviews.map((rev, rIdx) => (
-              <View key={rev.id || rIdx} style={styles.reviewItemCard}>
-                <View style={styles.reviewUserRow}>
-                  <Text style={styles.reviewUserName}>
-                    {rev.userName || 'Khách Hàng Concierge'}
-                  </Text>
-                  <Text style={styles.reviewDate}>{rev.createdAt || 'Gần đây'}</Text>
-                </View>
-
-                <View style={styles.reviewStarsRow}>
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <Ionicons
-                      key={s}
-                      name={s <= rev.rating ? 'star' : 'star-outline'}
-                      size={13}
-                      color="#DDAB61"
-                    />
-                  ))}
-                </View>
-
-                <Text style={styles.reviewComment}>{rev.comment}</Text>
-
-                {rev.attributes && rev.attributes.length > 0 && (
-                  <View style={styles.reviewAttrRow}>
-                    {rev.attributes.map((attr, aIdx) => (
-                      <View key={aIdx} style={styles.reviewAttrBadge}>
-                        <Text style={styles.reviewAttrText}>{attr}</Text>
+                  return (
+                    <TouchableOpacity
+                      key={vId}
+                      onPress={() => {
+                        setSelectedVariant(v);
+                        setQuantity(1);
+                      }}
+                      style={[styles.variantCard, isSelected && styles.variantCardActive]}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.variantCardTop}>
+                        <View
+                          style={[
+                            styles.radioDot,
+                            isSelected && styles.radioDotActive,
+                          ]}
+                        />
+                        <Text
+                          style={[
+                            styles.variantCardLabel,
+                            isSelected && styles.variantCardLabelActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {label}
+                        </Text>
                       </View>
-                    ))}
-                  </View>
-                )}
+                      {v.price && (
+                        <Text
+                          style={[
+                            styles.variantCardPrice,
+                            isSelected && styles.variantCardPriceActive,
+                          ]}
+                        >
+                          {formatCurrency(v.price)}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-            ))}
+            </View>
+          )}
+
+          {/* Bộ Chọn Số Lượng & Trạng Thái Kho */}
+          <View style={styles.sectionBlock}>
+            <View style={styles.quantityCard}>
+              <View>
+                <Text style={styles.quantityCardLabel}>Trạng thái kho</Text>
+                <View style={styles.stockStatusInline}>
+                  <View style={[styles.stockDot, isOutOfStock && styles.stockDotRed]} />
+                  <Text style={[styles.stockStatusText, isOutOfStock && styles.stockStatusTextRed]}>
+                    {isOutOfStock ? "Đã hết hàng" : `Còn ${availableStockCount} sản phẩm.`}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Nếu hết hàng thì ẩn hoặc khóa nút tăng giảm số lượng */}
+              {!isOutOfStock ? (
+                <View style={styles.counterControl}>
+                  <TouchableOpacity
+                    onPress={handleDecreaseQty}
+                    disabled={quantity <= 1}
+                    style={[styles.counterBtn, quantity <= 1 && styles.counterBtnDisabled]}
+                  >
+                    <Feather
+                      name="minus"
+                      size={15}
+                      color={quantity <= 1 ? "#B8B0A5" : "#252525"}
+                    />
+                  </TouchableOpacity>
+
+                  <Text style={styles.counterValue}>{quantity}</Text>
+
+                  <TouchableOpacity
+                    onPress={handleIncreaseQty}
+                    disabled={quantity >= availableStockCount}
+                    style={[
+                      styles.counterBtn,
+                      quantity >= availableStockCount && styles.counterBtnDisabled,
+                    ]}
+                  >
+                    <Feather
+                      name="plus"
+                      size={15}
+                      color={quantity >= availableStockCount ? "#B8B0A5" : "#252525"}
+                    />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </View>
           </View>
+
+          {/* Bảng Thông Số Kỹ Thuật (Specs Grid) */}
+          <View style={styles.sectionBlock}>
+            <Text style={styles.sectionTitle}>THÔNG SỐ SẢN PHẨM</Text>
+            <View style={styles.specsGridCard}>
+              {currentMaterial ? (
+                <View style={styles.specGridItem}>
+                  <Feather name="layers" size={16} color="#8A6A48" />
+                  <View style={styles.specItemTexts}>
+                    <Text style={styles.specKey}>Chất liệu</Text>
+                    <Text style={styles.specVal}>{currentMaterial}</Text>
+                  </View>
+                </View>
+              ) : null}
+
+              {currentColor ? (
+                <View style={styles.specGridItem}>
+                  <Feather name="droplet" size={16} color="#8A6A48" />
+                  <View style={styles.specItemTexts}>
+                    <Text style={styles.specKey}>Màu sắc</Text>
+                    <Text style={styles.specVal}>{currentColor}</Text>
+                  </View>
+                </View>
+              ) : null}
+
+              {currentSize ? (
+                <View style={styles.specGridItem}>
+                  <Feather name="maximize-2" size={16} color="#8A6A48" />
+                  <View style={styles.specItemTexts}>
+                    <Text style={styles.specKey}>Kích thước / Size</Text>
+                    <Text style={styles.specVal}>{currentSize}</Text>
+                  </View>
+                </View>
+              ) : null}
+
+              <View style={styles.specGridItem}>
+                <Feather name="shield" size={16} color="#8A6A48" />
+                <View style={styles.specItemTexts}>
+                  <Text style={styles.specKey}>Bảo hành chính hãng</Text>
+                  <Text style={styles.specVal}>12 Tháng Tiêu Chuẩn</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Mô Tả Chi Tiết */}
+          {product.description ? (
+            <View style={styles.sectionBlock}>
+              <Text style={styles.sectionTitle}>MÔ TẢ CHI TIẾT</Text>
+              <View style={styles.descCard}>
+                <Text style={styles.descriptionText}>{product.description}</Text>
+              </View>
+            </View>
+          ) : null}
+
+          {/* Nhận Xét & Đánh Giá */}
+          {reviews.length > 0 && (
+            <View style={styles.sectionBlock}>
+              <View style={styles.sectionTitleRow}>
+                <Text style={styles.sectionTitle}>ĐÁNH GIÁ KHÁCH HÀNG</Text>
+                <Text style={styles.selectedVariantNote}>({reviews.length} nhận xét)</Text>
+              </View>
+
+              {reviews.map((rev, rIdx) => (
+                <View key={rev.id || rIdx} style={styles.reviewCard}>
+                  <View style={styles.reviewTopRow}>
+                    <View style={styles.reviewAvatarPlaceholder}>
+                      <Text style={styles.reviewAvatarChar}>
+                        {(rev.userName || "U")[0].toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.reviewUserInfo}>
+                      <Text style={styles.reviewAuthor}>{rev.userName || "Khách Hàng"}</Text>
+                      <View style={styles.starRow}>
+                        {[1, 2, 3, 4, 5].map((s) => (
+                          <Ionicons
+                            key={s}
+                            name={s <= rev.rating ? "star" : "star-outline"}
+                            size={12}
+                            color="#C89D5C"
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                  <Text style={styles.reviewText}>{rev.comment}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
 
+      {/* Toast Alert */}
       {toastMessage && (
-        <Animated.View
-          style={[styles.toastContainer, { opacity: toastOpacity }]}
-          pointerEvents="none"
-        >
+        <Animated.View style={[styles.floatingToast, { opacity: toastOpacity }]} pointerEvents="none">
           <Ionicons name="checkmark-circle" size={18} color="#C89D5C" />
-          <Text style={styles.toastText}>{toastMessage}</Text>
+          <Text style={styles.floatingToastText}>{toastMessage}</Text>
         </Animated.View>
       )}
 
-      <View style={styles.bottomBar}>
-        <TouchableOpacity
-          onPress={() => toggleWishlist(product.id)}
-          style={styles.bottomWishlistBtn}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name={isWishlisted ? 'heart' : 'heart-outline'}
-            size={22}
-            color={isWishlisted ? '#D93838' : '#252525'}
-          />
-        </TouchableOpacity>
+      {/* Floating Bottom Bar - Bị vô hiệu hóa khi hết hàng */}
+      <View style={styles.bottomBarContainer}>
+        <View style={styles.bottomBarContent}>
+          <TouchableOpacity
+            onPress={handleAddToCart}
+            disabled={isOutOfStock}
+            style={[
+              styles.btnSecondary,
+              isOutOfStock && styles.btnDisabledSecondary,
+            ]}
+            activeOpacity={0.85}
+          >
+            <Feather
+              name={isOutOfStock ? "slash" : "shopping-bag"}
+              size={17}
+              color={isOutOfStock ? "#A1998E" : "#252525"}
+            />
+            <Text
+              style={[
+                styles.btnSecondaryText,
+                isOutOfStock && styles.btnDisabledText,
+              ]}
+            >
+              {isOutOfStock ? "Đã hết hàng" : "Thêm vào giỏ"}
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={handleAddToCart}
-          disabled={!currentVariantStock.inStock}
-          style={[
-            styles.addCartBtn,
-            !currentVariantStock.inStock && styles.btnDisabled,
-          ]}
-          activeOpacity={0.85}
-        >
-          <Feather name="shopping-bag" size={16} color="#FFFFFF" />
-          <Text style={styles.addCartText}>THÊM VÀO GIỎ</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={handleBuyNow}
-          disabled={!currentVariantStock.inStock}
-          style={[
-            styles.buyNowBtn,
-            !currentVariantStock.inStock && styles.btnDisabled,
-          ]}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.buyNowText}>MUA NGAY</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleBuyNow}
+            disabled={isOutOfStock}
+            style={[
+              styles.btnPrimary,
+              isOutOfStock && styles.btnDisabledPrimary,
+            ]}
+            activeOpacity={0.85}
+          >
+            <Text
+              style={[
+                styles.btnPrimaryText,
+                isOutOfStock && styles.btnDisabledTextPrimary,
+              ]}
+            >
+              {isOutOfStock ? "HẾT HÀNG" : "Mua ngay"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: "#F7F4EE",
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F7F4EE',
+    backgroundColor: "#F7F4EE",
+  },
+  centerContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 30,
+  },
+  loadingText: {
+    marginTop: 14,
+    fontSize: 13,
+    color: "#8A6A48",
+    fontWeight: "500",
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#252525",
+    marginTop: 12,
+  },
+  errorSub: {
+    fontSize: 13,
+    color: "#6E6860",
+    marginTop: 6,
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  backBtn: {
+    backgroundColor: "#8A6A48",
+    paddingHorizontal: 22,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  backBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+    fontSize: 13,
+  },
+
+  /* Floating Header */
+  floatingHeaderArea: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: '#F7F4EE',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2DBD0',
-    zIndex: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   headerIconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#E9E1D5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(255, 255, 255, 0.88)",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  headerTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#8A6A48',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  headerRight: {
-    flexDirection: 'row',
-    gap: 8,
+  headerRightGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   cartBadge: {
-    position: 'absolute',
-    top: -3,
-    right: -3,
-    backgroundColor: '#D93838',
+    position: "absolute",
+    top: -2,
+    right: -2,
+    backgroundColor: "#D93838",
     borderRadius: 8,
     minWidth: 16,
     height: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 3,
   },
   cartBadgeText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 9,
-    fontWeight: '700',
+    fontWeight: "700",
   },
+
+  /* Gallery */
   scrollContent: {
     paddingBottom: 110,
   },
-  galleryContainer: {
+  galleryWrapper: {
     width: width,
-    height: 320,
-    backgroundColor: '#E9E1D5',
-    position: 'relative',
+    height: IMAGE_HEIGHT,
+    backgroundColor: "#EBE5DB",
+    position: "relative",
   },
-  gallerySlide: {
+  slideBox: {
     width: width,
-    height: 320,
+    height: IMAGE_HEIGHT,
   },
-  galleryImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+  emptyImageBox: {
+    justifyContent: "center",
+    alignItems: "center",
   },
-  galleryCounterBadge: {
-    position: 'absolute',
-    bottom: 16,
-    right: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  slideImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  counterBadge: {
+    position: "absolute",
+    bottom: 24,
+    right: 18,
+    backgroundColor: "rgba(37, 37, 37, 0.65)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+  },
+  counterBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+  },
+  dotsRow: {
+    position: "absolute",
+    bottom: 26,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+  },
+  dotItem: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255, 255, 255, 0.45)",
+  },
+  dotItemActive: {
+    width: 18,
+    backgroundColor: "#FFFFFF",
+  },
+
+  /* Content Sheet */
+  contentSheet: {
+    marginTop: -16,
+    backgroundColor: "#F7F4EE",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+  },
+  tagLineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  brandPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#EFE8DC",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  galleryCounterText: {
-    color: '#FFFFFF',
+  brandPillText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "700",
+    color: "#8A6A48",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
   },
-  paginationDotsRow: {
-    position: 'absolute',
-    bottom: 16,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
+  categoryBadgeText: {
+    fontSize: 12,
+    color: "#8A6A48",
+    fontWeight: "500",
   },
-  paginationDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-  },
-  paginationDotActive: {
-    width: 18,
-    backgroundColor: '#FFFFFF',
-  },
-  detailsSection: {
-    padding: 20,
-  },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  brandText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#8A6A48',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-  },
-  verifiedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#E9E1D5',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  verifiedText: {
-    fontSize: 10,
-    color: '#8A6A48',
-    fontWeight: '600',
-  },
-  titleText: {
-    fontSize: 21,
-    fontWeight: '700',
-    color: '#252525',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
-    marginBottom: 8,
-    lineHeight: 28,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  productTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#252525",
+    lineHeight: 30,
     marginBottom: 14,
-  },
-  starGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  ratingScore: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#252525',
-  },
-  reviewCount: {
-    fontSize: 12,
-    color: '#6E6860',
-    marginLeft: 4,
-  },
-  dividerDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#C2B8A3',
-    marginHorizontal: 8,
-  },
-  categoryName: {
-    fontSize: 12,
-    color: '#8A6A48',
-    fontWeight: '500',
   },
   priceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 10,
-    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginBottom: 16,
   },
-  dynamicPrice: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#8A6A48',
+  priceLabel: {
+    fontSize: 11,
+    color: "#8C8377",
+    textTransform: "uppercase",
+    fontWeight: "600",
+    marginBottom: 2,
+    letterSpacing: 0.5,
   },
-  originalPrice: {
-    fontSize: 14,
-    color: '#999187',
-    textDecorationLine: 'line-through',
+  productPrice: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#8A6A48",
+    letterSpacing: -0.5,
   },
-  tagBadge: {
-    backgroundColor: '#8A6A48',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginLeft: 'auto',
+  skuBox: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2DBD0",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    alignItems: "flex-end",
   },
-  tagBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
+  skuLabel: {
+    fontSize: 9,
+    color: "#8C8377",
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
-  descriptionText: {
-    fontSize: 14,
-    color: '#6E6860',
-    lineHeight: 22,
+  skuCode: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#252525",
+  },
+  thinDivider: {
+    height: 1,
+    backgroundColor: "#E2DBD0",
+    marginVertical: 14,
+  },
+
+  /* Sections */
+  sectionBlock: {
     marginBottom: 20,
   },
-  variantSection: {
-    marginBottom: 20,
-  },
-  variantHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 10,
   },
-  variantLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#252525',
-  },
-  variantValue: {
-    fontSize: 13,
-    color: '#8A6A48',
-    fontWeight: '600',
-  },
-  colorSwatchesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  colorSwatchContainer: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-    position: 'relative',
-  },
-  colorSwatchActive: {
-    borderColor: '#8A6A48',
-  },
-  colorSwatchDisabled: {
-    opacity: 0.35,
-  },
-  colorSwatchCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.15)',
-  },
-  disabledLine: {
-    position: 'absolute',
-    width: 36,
-    height: 2,
-    backgroundColor: '#D93838',
-    transform: [{ rotate: '-45deg' }],
-  },
-  optionPillGroup: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  optionPill: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2DBD0',
-  },
-  optionPillActive: {
-    backgroundColor: '#8A6A48',
-    borderColor: '#8A6A48',
-  },
-  optionPillDisabled: {
-    backgroundColor: '#F0ECE4',
-    borderColor: '#E2DBD0',
-    opacity: 0.5,
-  },
-  optionPillText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#252525',
-  },
-  optionPillTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  optionPillTextDisabled: {
-    color: '#999187',
-    textDecorationLine: 'line-through',
-  },
-  stockQtyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E2DBD0',
-    marginBottom: 20,
-  },
-  stockStatusBox: {
-    gap: 4,
-  },
-  stockLabel: {
+  sectionTitle: {
     fontSize: 11,
-    color: '#6E6860',
-    fontWeight: '500',
+    fontWeight: "700",
+    color: "#8A6A48",
+    fontFamily: Platform.OS === 'ios' ? 'serif' : 'serif',
+    marginTop: 5,
   },
-  inStockBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  selectedVariantNote: {
+    fontSize: 12,
+    color: "#6E6860",
+    fontWeight: "500",
   },
-  inStockText: {
+
+  /* Variants Cards */
+  variantsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  variantCard: {
+    flexBasis: "48%",
+    flexGrow: 1,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "#E2DBD0",
+    borderRadius: 14,
+    padding: 12,
+  },
+  variantCardActive: {
+    borderColor: "#8A6A48",
+    backgroundColor: "#FAF7F2",
+  },
+  variantCardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  radioDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: "#B8B0A5",
+  },
+  radioDotActive: {
+    borderColor: "#8A6A48",
+    backgroundColor: "#8A6A48",
+  },
+  variantCardLabel: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#27AE60',
+    fontWeight: "600",
+    color: "#4A453F",
+    flex: 1,
   },
-  outOfStockBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  variantCardLabelActive: {
+    color: "#252525",
+    fontWeight: "700",
   },
-  outOfStockText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#D93838',
+  variantCardPrice: {
+    fontSize: 12,
+    color: "#8C8377",
+    fontWeight: "500",
+    paddingLeft: 20,
   },
-  qtyControlBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F7F4EE',
-    borderRadius: 20,
+  variantCardPriceActive: {
+    color: "#8A6A48",
+    fontWeight: "700",
+  },
+
+  /* Quantity Card */
+  quantityCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: '#E2DBD0',
-    paddingHorizontal: 4,
-    paddingVertical: 2,
+    borderColor: "#E2DBD0",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  qtyBtn: {
+  quantityCardLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#252525",
+    marginBottom: 3,
+  },
+  stockStatusInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  stockDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#27AE60",
+  },
+  stockDotRed: {
+    backgroundColor: "#D93838",
+  },
+  stockStatusText: {
+    fontSize: 11,
+    color: "#6E6860",
+    fontWeight: "500",
+  },
+  stockStatusTextRed: {
+    color: "#D93838",
+    fontWeight: "700",
+  },
+  counterControl: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F7F4EE",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#E2DBD0",
+    paddingHorizontal: 4,
+    paddingVertical: 3,
+  },
+  counterBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
   },
-  qtyBtnDisabled: {
+  counterBtnDisabled: {
+    backgroundColor: "transparent",
     opacity: 0.4,
   },
-  qtyText: {
+  counterValue: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#252525',
+    fontWeight: "700",
+    color: "#252525",
     paddingHorizontal: 12,
   },
-  specsCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 16,
+
+  /* Specs Grid Card */
+  specsGridCard: {
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: '#E2DBD0',
-    gap: 10,
+    borderColor: "#E2DBD0",
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    rowGap: 14,
+    marginTop: 10,
   },
-  specsCardTitle: {
+  specGridItem: {
+    width: "50%",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingRight: 8,
+  },
+  specItemTexts: {
+    flex: 1,
+  },
+  specKey: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#8A6A48',
-    letterSpacing: 1.2,
+    color: "#8C8377",
     marginBottom: 2,
   },
-  specRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  specVal: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#252525",
+  },
+
+  /* Description Card */
+  descCard: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2DBD0",
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 10,
+  },
+  descriptionText: {
+    fontSize: 13,
+    color: "#4A453F",
+    lineHeight: 22,
+  },
+
+  /* Reviews */
+  reviewCard: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2DBD0",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+  },
+  reviewTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
+    marginBottom: 8,
   },
-  specLabel: {
-    fontSize: 12,
-    color: '#6E6860',
+  reviewAvatarPlaceholder: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#E9E1D5",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  specValue: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#252525',
+  reviewAvatarChar: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#8A6A48",
+  },
+  reviewUserInfo: {
     flex: 1,
-    textAlign: 'right',
   },
-  toastContainer: {
-    position: 'absolute',
-    top: 70,
+  reviewAuthor: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#252525",
+    marginBottom: 2,
+  },
+  starRow: {
+    flexDirection: "row",
+    gap: 2,
+  },
+  reviewText: {
+    fontSize: 12,
+    color: "#6E6860",
+    lineHeight: 18,
+  },
+
+  /* Floating Toast */
+  floatingToast: {
+    position: "absolute",
+    top: 75,
     left: 20,
     right: 20,
-    backgroundColor: '#252525',
+    backgroundColor: "#252525",
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
-    zIndex: 100,
+    elevation: 8,
+    zIndex: 200,
   },
-  toastText: {
-    color: '#FFFFFF',
+  floatingToastText: {
+    color: "#FFFFFF",
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
     flex: 1,
   },
-  bottomBar: {
-    position: 'absolute',
+
+  /* Sticky Bottom Bar */
+  bottomBarContainer: {
+    position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#F7F4EE',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    backgroundColor: "#F7F4EE",
     borderTopWidth: 1,
-    borderTopColor: '#E2DBD0',
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderTopColor: "#E2DBD0",
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 20,
+  },
+  bottomBarContent: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
   },
-  bottomWishlistBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2DBD0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addCartBtn: {
+  btnSecondary: {
     flex: 1,
     height: 48,
-    backgroundColor: '#8A6A48',
     borderRadius: 24,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "#E2DBD0",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
   },
-  addCartText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
+  btnSecondaryText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#252525",
   },
-  buyNowBtn: {
+  btnPrimary: {
     flex: 1,
     height: 48,
-    backgroundColor: '#252525',
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#8A6A48",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#8A6A48",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  buyNowText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
+  btnPrimaryText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.5,
+  },
+
+  /* Trạng thái bị vô hiệu hóa khi hết hàng */
+  btnDisabledSecondary: {
+    backgroundColor: "#EFECE6",
+    borderColor: "#E2DBD0",
+    opacity: 0.7,
+  },
+  btnDisabledPrimary: {
+    backgroundColor: "#C2B8A3",
+    shadowOpacity: 0,
+    elevation: 0,
+    opacity: 0.7,
+  },
+  btnDisabledText: {
+    color: "#8C8377",
+  },
+  btnDisabledTextPrimary: {
+    color: "#FAF8F5",
     letterSpacing: 1,
-  },
-  btnDisabled: {
-    backgroundColor: '#C2B8A3',
-    opacity: 0.6,
-  },
-  reviewsSection: {
-    marginTop: 20,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E2DBD0',
-    padding: 16,
-  },
-  reviewsHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F7F4EE',
-    paddingBottom: 12,
-  },
-  reviewsSectionTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#8A6A48',
-    letterSpacing: 1.2,
-    marginBottom: 4,
-  },
-  ratingOverviewRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  ratingNumber: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#252525',
-  },
-  ratingCount: {
-    fontSize: 12,
-    color: '#6E6860',
-  },
-  writeReviewBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#8A6A48',
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    gap: 6,
-  },
-  writeReviewBtnText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  reviewItemCard: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F7F4EE',
-  },
-  reviewUserRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  reviewUserName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#252525',
-  },
-  reviewDate: {
-    fontSize: 11,
-    color: '#999187',
-  },
-  reviewStarsRow: {
-    flexDirection: 'row',
-    gap: 2,
-    marginBottom: 6,
-  },
-  reviewComment: {
-    fontSize: 13,
-    color: '#4A453F',
-    lineHeight: 18,
-    marginBottom: 6,
-  },
-  reviewAttrRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  reviewAttrBadge: {
-    backgroundColor: '#F7F4EE',
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-  },
-  reviewAttrText: {
-    fontSize: 10,
-    color: '#8A6A48',
-    fontWeight: '500',
   },
 });

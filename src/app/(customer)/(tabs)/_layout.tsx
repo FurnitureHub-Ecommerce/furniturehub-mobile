@@ -2,68 +2,83 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/context/AppContext';
 
 export default function CustomerTabsLayout() {
   const { cartCount, wishlistIds } = useApp();
   const wishlistCount = wishlistIds ? wishlistIds.size : 0;
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: '#8A6A48',
-        tabBarInactiveTintColor: '#8E8E93',
+        tabBarInactiveTintColor: '#A0988E',
         tabBarStyle: {
           backgroundColor: '#FFFFFF',
           borderTopColor: '#E2DBD0',
           borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 88 : 64,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 10,
+          height: Platform.OS === 'ios' ? 58 + insets.bottom : 64,
+          paddingBottom: 0,
           paddingTop: 8,
-          elevation: 8,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.05,
-          shadowRadius: 4,
+          elevation: 12,
+          shadowColor: '#1A1817',
+          shadowOffset: { width: 0, height: -3 },
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
         },
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: '600',
           letterSpacing: 0.2,
+          marginTop: Platform.OS === 'android' ? 2 : 0,
         },
       }}
     >
-      {/* 1. Home Navigator */}
+      {/* 1. Trang Chủ */}
       <Tabs.Screen
         name="home"
         options={{
           title: 'Trang Chủ',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />
+            <Ionicons 
+              name={focused ? 'home' : 'home-outline'} 
+              size={22} 
+              color={(color as string) || '#8A6A48'} 
+            />
           ),
         }}
       />
 
-      {/* 2. Category / Shop Navigator */}
+      {/* 2. Danh Mục */}
       <Tabs.Screen
         name="shop"
         options={{
           title: 'Danh Mục',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'grid' : 'grid-outline'} size={21} color={color} />
+            <Ionicons 
+              name={focused ? 'grid' : 'grid-outline'} 
+              size={21} 
+              color={(color as string) || '#8A6A48'} 
+            />
           ),
         }}
       />
 
-      {/* 3. Wishlist Navigator */}
+      {/* 3. Yêu Thích */}
       <Tabs.Screen
         name="wishlist"
         options={{
           title: 'Yêu Thích',
           tabBarIcon: ({ color, focused }) => (
             <View style={styles.iconWrapper}>
-              <Ionicons name={focused ? 'heart' : 'heart-outline'} size={22} color={color} />
+              <Ionicons 
+                name={focused ? 'heart' : 'heart-outline'} 
+                size={22} 
+                color={(color as string) || '#8A6A48'} 
+              />
               {wishlistCount > 0 && (
                 <View style={styles.wishlistBadge}>
                   <Text style={styles.badgeText}>
@@ -76,16 +91,20 @@ export default function CustomerTabsLayout() {
         }}
       />
 
-      {/* 4. Cart Navigator */}
+      {/* 4. Giỏ Hàng */}
       <Tabs.Screen
         name="cart"
         options={{
           title: 'Giỏ Hàng',
           tabBarIcon: ({ color }) => (
             <View style={styles.iconWrapper}>
-              <Feather name="shopping-bag" size={21} color={color} />
+              <Feather 
+                name="shopping-bag" 
+                size={21} 
+                color={(color as string) || '#8A6A48'} 
+              />
               {cartCount > 0 && (
-                <View style={styles.badge}>
+                <View style={styles.cartBadge}>
                   <Text style={styles.badgeText}>
                     {cartCount > 99 ? '99+' : cartCount}
                   </Text>
@@ -96,18 +115,21 @@ export default function CustomerTabsLayout() {
         }}
       />
 
-      {/* 5. Profile / Account Navigator */}
+      {/* 5. Hồ Sơ */}
       <Tabs.Screen
         name="account"
         options={{
           title: 'Hồ Sơ',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={21} color={color} />
+            <Ionicons 
+              name={focused ? 'person' : 'person-outline'} 
+              size={21} 
+              color={(color as string) || '#8A6A48'} 
+            />
           ),
         }}
       />
 
-      {/* Ẩn file index khỏi thanh tab bar */}
       <Tabs.Screen
         name="index"
         options={{
@@ -125,19 +147,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -8,
-    backgroundColor: '#D93838',
-    borderRadius: 9,
-    minWidth: 17,
-    height: 17,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 3,
-  },
-  wishlistBadge: {
+  cartBadge: {
     position: 'absolute',
     top: -4,
     right: -8,
@@ -147,11 +157,28 @@ const styles = StyleSheet.create({
     height: 17,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 3,
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  wishlistBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    backgroundColor: '#3D2E1E',
+    borderRadius: 9,
+    minWidth: 17,
+    height: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
   },
   badgeText: {
     color: '#FFFFFF',
     fontSize: 9,
     fontWeight: '700',
+    textAlign: 'center',
   },
 });

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,18 +10,18 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { BRANDS, SORT_OPTIONS } from '@/services/mockData';
 
 export interface FilterState {
-  brandId: string;
-  priceRange: 'all' | 'under500' | '500-1500' | '1500-3000' | 'above3000';
-  sortOrder: string;
+  categoryId: string;
+  priceRange: 'all' | 'under-2m' | '2m-5m' | '5m-10m' | 'above-10m';
+  sortOrder: 'newest' | 'price-asc' | 'price-desc' | 'rating';
   inStockOnly: boolean;
 }
 
 interface FilterModalProps {
   visible: boolean;
   filters: FilterState;
+  categories: any[];
   onClose: () => void;
   onApplyFilters: (filters: FilterState) => void;
   onResetFilters: () => void;
@@ -29,24 +29,32 @@ interface FilterModalProps {
 }
 
 const PRICE_TIERS = [
-  { id: 'all', label: 'Tất Cả' },
-  { id: 'under500', label: 'Dưới $500' },
-  { id: '500-1500', label: '$500 - $1,500' },
-  { id: '1500-3000', label: '$1,500 - $3,000' },
-  { id: 'above3000', label: 'Trên $3,000' },
+  { id: 'all', label: 'Tất Cả Mức Giá' },
+  { id: 'under-2m', label: 'Dưới 2 Triệu' },
+  { id: '2m-5m', label: 'Từ 2 - 5 Triệu' },
+  { id: '5m-10m', label: 'Từ 5 - 10 Triệu' },
+  { id: 'above-10m', label: 'Trên 10 Triệu' },
+];
+
+const SORT_OPTIONS = [
+  { id: 'newest', label: 'Mới Nhất' },
+  { id: 'price-asc', label: 'Giá: Thấp Đến Cao' },
+  { id: 'price-desc', label: 'Giá: Cao Đến Thấp' },
+  { id: 'rating', label: 'Đánh Giá Cao Nhất' },
 ];
 
 export const FilterModal: React.FC<FilterModalProps> = ({
   visible,
   filters,
+  categories,
   onClose,
   onApplyFilters,
   onResetFilters,
   matchingCount,
 }) => {
-  const [localFilters, setLocalFilters] = React.useState<FilterState>(filters);
+  const [localFilters, setLocalFilters] = useState<FilterState>(filters);
 
-  React.useEffect(() => {
+  useEffect(() => {
     setLocalFilters(filters);
   }, [filters, visible]);
 
@@ -57,7 +65,6 @@ export const FilterModal: React.FC<FilterModalProps> = ({
 
   const handleReset = () => {
     onResetFilters();
-    onClose();
   };
 
   return (
@@ -70,50 +77,28 @@ export const FilterModal: React.FC<FilterModalProps> = ({
       <View style={styles.overlay}>
         <View style={styles.sheetContainer}>
           <SafeAreaView style={styles.safeArea}>
-            {/* Modal Header */}
             <View style={styles.header}>
-              <Text style={styles.headerTitle}>Bộ Lọc Nâng Cao</Text>
-              <TouchableOpacity
-                onPress={onClose}
-                style={styles.closeBtn}
-                activeOpacity={0.7}
-              >
+              <Text style={styles.headerTitle}>Bộ Lọc Tìm Kiếm</Text>
+              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
                 <Feather name="x" size={20} color="#252525" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              {/* BRAND FILTER (Task 4) */}
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+              {/* Sắp xếp */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>THƯƠNG HIỆU (BRAND)</Text>
+                <Text style={styles.sectionTitle}>SẮP XẾP THEO</Text>
                 <View style={styles.chipsWrap}>
-                  {BRANDS.map((brand) => {
-                    const isSelected = localFilters.brandId === brand.id;
+                  {SORT_OPTIONS.map((opt) => {
+                    const isSelected = localFilters.sortOrder === opt.id;
                     return (
                       <TouchableOpacity
-                        key={brand.id}
-                        onPress={() =>
-                          setLocalFilters((prev) => ({
-                            ...prev,
-                            brandId: brand.id,
-                          }))
-                        }
-                        style={[
-                          styles.chip,
-                          isSelected && styles.chipActive,
-                        ]}
-                        activeOpacity={0.8}
+                        key={opt.id}
+                        onPress={() => setLocalFilters((prev) => ({ ...prev, sortOrder: opt.id as any }))}
+                        style={[styles.chip, isSelected && styles.chipActive]}
                       >
-                        <Text
-                          style={[
-                            styles.chipText,
-                            isSelected && styles.chipTextActive,
-                          ]}
-                        >
-                          {brand.name}
+                        <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                          {opt.label}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -121,33 +106,19 @@ export const FilterModal: React.FC<FilterModalProps> = ({
                 </View>
               </View>
 
-              {/* PRICE RANGE FILTER */}
+              {/* Khoảng giá theo tiền VNĐ */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>KHOẢNG GIÁ ($ USD)</Text>
+                <Text style={styles.sectionTitle}>KHOẢNG GIÁ (VNĐ)</Text>
                 <View style={styles.chipsWrap}>
                   {PRICE_TIERS.map((tier) => {
                     const isSelected = localFilters.priceRange === tier.id;
                     return (
                       <TouchableOpacity
                         key={tier.id}
-                        onPress={() =>
-                          setLocalFilters((prev) => ({
-                            ...prev,
-                            priceRange: tier.id as any,
-                          }))
-                        }
-                        style={[
-                          styles.chip,
-                          isSelected && styles.chipActive,
-                        ]}
-                        activeOpacity={0.8}
+                        onPress={() => setLocalFilters((prev) => ({ ...prev, priceRange: tier.id as any }))}
+                        style={[styles.chip, isSelected && styles.chipActive]}
                       >
-                        <Text
-                          style={[
-                            styles.chipText,
-                            isSelected && styles.chipTextActive,
-                          ]}
-                        >
+                        <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
                           {tier.label}
                         </Text>
                       </TouchableOpacity>
@@ -156,78 +127,28 @@ export const FilterModal: React.FC<FilterModalProps> = ({
                 </View>
               </View>
 
-              {/* SORT ORDER FILTER */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>SẮP XẾP SẢN PHẨM</Text>
-                <View style={styles.sortList}>
-                  {SORT_OPTIONS.map((opt) => {
-                    const isSelected = localFilters.sortOrder === opt.id;
-                    return (
-                      <TouchableOpacity
-                        key={opt.id}
-                        onPress={() =>
-                          setLocalFilters((prev) => ({
-                            ...prev,
-                            sortOrder: opt.id,
-                          }))
-                        }
-                        style={[
-                          styles.sortOption,
-                          isSelected && styles.sortOptionActive,
-                        ]}
-                        activeOpacity={0.8}
-                      >
-                        <Text
-                          style={[
-                            styles.sortOptionText,
-                            isSelected && styles.sortOptionTextActive,
-                          ]}
-                        >
-                          {opt.label}
-                        </Text>
-                        {isSelected && (
-                          <Feather name="check" size={16} color="#8A6A48" />
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* IN STOCK TOGGLE */}
+              {/* Chỉ hiện sản phẩm còn hàng */}
               <View style={styles.switchRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.switchTitle}>Chỉ hiện sản phẩm còn hàng</Text>
-                  <Text style={styles.switchSub}>
-                    Lọc bỏ các biến thể sản phẩm đã hết hàng trong kho
-                  </Text>
+                  <Text style={styles.switchSub}>Lọc bỏ các sản phẩm đã hết hàng trong kho</Text>
                 </View>
                 <Switch
                   value={localFilters.inStockOnly}
-                  onValueChange={(val) =>
-                    setLocalFilters((prev) => ({ ...prev, inStockOnly: val }))
-                  }
+                  onValueChange={(val) => setLocalFilters((prev) => ({ ...prev, inStockOnly: val }))}
                   trackColor={{ false: '#E2DBD0', true: '#8A6A48' }}
                   thumbColor="#FFFFFF"
                 />
               </View>
             </ScrollView>
 
-            {/* Bottom Actions */}
+            {/* Footer Buttons */}
             <View style={styles.footer}>
-              <TouchableOpacity
-                onPress={handleReset}
-                style={styles.resetBtn}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.resetText}>Thiết Lập Lại</Text>
+              <TouchableOpacity onPress={handleReset} style={styles.resetBtn}>
+                <Text style={styles.resetText}>Đặt Lại</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={handleApply}
-                style={styles.applyBtn}
-                activeOpacity={0.85}
-              >
+              <TouchableOpacity onPress={handleApply} style={styles.applyBtn}>
                 <Text style={styles.applyText}>
                   Áp Dụng ({matchingCount} Sản Phẩm)
                 </Text>
@@ -265,7 +186,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E2DBD0',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     color: '#252525',
   },
@@ -281,14 +202,14 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 22,
   },
   sectionTitle: {
     fontSize: 11,
     fontWeight: '700',
     color: '#8A6A48',
     letterSpacing: 1.2,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   chipsWrap: {
     flexDirection: 'row',
@@ -316,33 +237,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
   },
-  sortList: {
-    gap: 8,
-  },
-  sortOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2DBD0',
-  },
-  sortOptionActive: {
-    borderColor: '#8A6A48',
-    backgroundColor: '#FDFBF7',
-  },
-  sortOptionText: {
-    fontSize: 13,
-    color: '#252525',
-    fontWeight: '500',
-  },
-  sortOptionTextActive: {
-    color: '#8A6A48',
-    fontWeight: '700',
-  },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -355,14 +249,14 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   switchTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#252525',
+    marginBottom: 2,
   },
   switchSub: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6E6860',
-    marginTop: 2,
   },
   footer: {
     flexDirection: 'row',
@@ -375,7 +269,7 @@ const styles = StyleSheet.create({
   },
   resetBtn: {
     paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     borderRadius: 24,
     borderWidth: 1,
     borderColor: '#E2DBD0',

@@ -9,7 +9,7 @@ export default function WelcomeScreen() {
 
   return (
     <ImageBackground
-      source={{ uri: 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?q=80&w=1000&auto=format&fit=crop' }}
+      source={{ uri: 'https://noithatmanhhe.vn/wp-content/uploads/2024/03/thiet-ke-noi-that-phong-khach-1.jpg' }}
       style={styles.background}
     >
       {/* Thay thế LinearGradient bằng View phủ màu tối */}

@@ -64,7 +64,6 @@ export default function EditProfileScreen() {
         {
           fullName: fullName.trim(),
           phone: phone.trim(),
-          avatar: avatar.trim(),
         },
         token || undefined
       );
@@ -127,13 +126,13 @@ export default function EditProfileScreen() {
                 <Feather name="camera" size={14} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
-            <Text style={styles.avatarHelper}>Ảnh đại diện thành viên Concierge</Text>
+            <Text style={styles.avatarHelper}>{fullName}</Text>
           </View>
 
           {/* Form with Fixed Icon Padding */}
           <View style={styles.formCard}>
             {/* Họ và tên */}
-            <Text style={styles.inputLabel}>HỌ VÀ TÊN</Text>
+            <Text style={styles.inputLabel}>Họ và tên</Text>
             <View style={styles.inputContainer}>
               <View style={styles.iconBox}>
                 <Feather name="user" size={18} color="#8A6A48" />
@@ -148,7 +147,7 @@ export default function EditProfileScreen() {
             </View>
 
             {/* Email (Read-only) */}
-            <Text style={styles.inputLabel}>ĐỊA CHỈ EMAIL (TÀI KHOẢN ĐĂNG NHẬP)</Text>
+            <Text style={styles.inputLabel}>Địa chỉ email</Text>
             <View style={[styles.inputContainer, styles.inputDisabled]}>
               <View style={styles.iconBox}>
                 <Feather name="mail" size={18} color="#999187" />
@@ -164,7 +163,7 @@ export default function EditProfileScreen() {
             </View>
 
             {/* Số điện thoại */}
-            <Text style={styles.inputLabel}>SỐ ĐIỆN THOẠI LIÊN HỆ</Text>
+            <Text style={styles.inputLabel}>Số điện thoại </Text>
             <View style={styles.inputContainer}>
               <View style={styles.iconBox}>
                 <Feather name="phone" size={18} color="#8A6A48" />
@@ -176,22 +175,6 @@ export default function EditProfileScreen() {
                 keyboardType="phone-pad"
                 value={phone}
                 onChangeText={setPhone}
-              />
-            </View>
-
-            {/* URL Hình đại diện */}
-            <Text style={styles.inputLabel}>ĐƯỜNG DẪN ẢNH ĐẠI DIỆN (URL TÙY CHỌN)</Text>
-            <View style={styles.inputContainer}>
-              <View style={styles.iconBox}>
-                <Feather name="image" size={18} color="#8A6A48" />
-              </View>
-              <TextInput
-                style={styles.textInput}
-                placeholder="https://..."
-                placeholderTextColor="#A0988E"
-                value={avatar}
-                onChangeText={setAvatar}
-                autoCapitalize="none"
               />
             </View>
           </View>
@@ -206,7 +189,7 @@ export default function EditProfileScreen() {
             {saving ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.saveBtnText}>LƯU THAY ĐỔI HỒ SƠ</Text>
+              <Text style={styles.saveBtnText}>Lưu hồ sơ</Text>
             )}
           </TouchableOpacity>
         </ScrollView>
@@ -252,7 +235,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#252525',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    fontFamily: Platform.OS === 'ios' ? 'Times New Roman' : 'serif',
   },
   scrollContent: {
     padding: 20,
@@ -299,12 +282,12 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   inputLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#8A6A48',
-    letterSpacing: 1.2,
     marginBottom: 6,
     marginTop: 12,
+    fontFamily: Platform.OS === 'ios' ? 'serif' : 'serif',
   },
   // Ô nhập liệu fix triệt để khoảng cách padding icon
   inputContainer: {
@@ -340,20 +323,20 @@ const styles = StyleSheet.create({
   },
   saveBtn: {
     height: 52,
-    backgroundColor: '#8A6A48',
-    borderRadius: 26,
+    backgroundColor: '#7e4e1a',
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#8A6A48',
+    shadowColor: '#855d32',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
     elevation: 3,
   },
   saveBtnText: {
-    color: '#FFFFFF',
+    color: '#ffffff',
     fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 1.5,
+    fontFamily: Platform.OS === 'ios' ? 'serif' : 'serif'
   },
 });

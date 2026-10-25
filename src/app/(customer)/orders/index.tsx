@@ -14,6 +14,11 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { getOrdersApi, OrderItem, formatCurrency } from '@/services/api';
 
+const FONTS = {
+  SERIF: Platform.OS === 'ios' ? 'serif' : 'serif',
+  SANS: Platform.OS === 'ios' ? 'sans-serif' : 'sans-serif',
+};
+
 const ORDER_TABS = [
   { id: 'all', label: 'Tất Cả' },
   { id: 'pending', label: 'Chờ Xử Lý' },
@@ -52,43 +57,56 @@ export default function OrderHistoryScreen() {
 
   const filteredOrders = orders.filter((order) => {
     if (activeTab === 'all') return true;
+    const status = (order.status || '').toLowerCase();
     if (activeTab === 'pending') {
-      return order.status === 'pending' || order.status === 'Chờ Xử Lý';
+      return status === 'pending' || status === 'chờ xử lý';
     }
     if (activeTab === 'in_transit') {
-      return order.status === 'in_transit' || order.status === 'Đang Giao Hàng' || order.status === 'Đang Vận Chuyển';
+      return status === 'in_transit' || status === 'đang giao hàng' || status === 'đang vận chuyển';
     }
     if (activeTab === 'delivered') {
-      return order.status === 'delivered' || order.status === 'Đã Giao Hàng';
+      return status === 'delivered' || status === 'đã giao hàng';
     }
     if (activeTab === 'cancelled') {
-      return order.status === 'cancelled' || order.status === 'Đã Hủy';
+      return status === 'cancelled' || status === 'rejected' || status === 'đã hủy';
     }
     return true;
   });
 
-  const getStatusBadgeStyle = (status: string) => {
-    switch (status) {
+  // Việt hóa và định dạng badge trạng thái mượt mà
+  const getStatusInfo = (status: string) => {
+    const s = (status || '').toLowerCase();
+    switch (s) {
       case 'delivered':
-      case 'Đã Giao Hàng':
-        return { bg: '#E2F0D9', text: '#2E7D32' };
+      case 'đã giao hàng':
+        return { bg: '#E2F0D9', text: '#2E7D32', label: 'Đã Giao' };
       case 'in_transit':
-      case 'Đang Giao Hàng':
-      case 'Đang Vận Chuyển':
-        return { bg: '#F5EBE1', text: '#8A6A48' };
+      case 'đang giao hàng':
+      case 'đang vận chuyển':
+        return { bg: '#F5EBE1', text: '#8A6A48', label: 'Đang Giao' };
       case 'pending':
-      case 'Chờ Xử Lý':
-        return { bg: '#FEF5E7', text: '#E67E22' };
+      case 'chờ xử lý':
+        return { bg: '#FEF5E7', text: '#E67E22', label: 'Chờ Xử Lý' };
+      case 'rejected':
       case 'cancelled':
-      case 'Đã Hủy':
-        return { bg: '#FCE8E6', text: '#D93838' };
+      case 'đã hủy':
+        return { bg: '#FCE8E6', text: '#D93838', label: 'Đã Hủy' };
       default:
-        return { bg: '#E9E1D5', text: '#8A6A48' };
+        return { bg: '#E9E1D5', text: '#8A6A48', label: status || 'Khác' };
     }
   };
 
+  // Cắt ngắn Mã đơn hàng chỉ hiển thị 8-10 ký tự cuối gọn đẹp
+  const formatOrderId = (rawId: string, orderNumber?: string) => {
+    if (orderNumber && orderNumber.length <= 12) return `#${orderNumber}`;
+    if (rawId) {
+      return `#${rawId.slice(-8).toUpperCase()}`;
+    }
+    return '#LUMORA';
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -96,7 +114,7 @@ export default function OrderHistoryScreen() {
           style={styles.iconButton}
           activeOpacity={0.7}
         >
-          <Feather name="arrow-left" size={20} color="#252525" />
+          <Feather name="arrow-left" size={18} color="#252525" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Lịch Sử Đơn Hàng</Text>
         <TouchableOpacity
@@ -104,7 +122,7 @@ export default function OrderHistoryScreen() {
           style={styles.iconButton}
           activeOpacity={0.7}
         >
-          <Feather name="refresh-cw" size={17} color="#8A6A48" />
+          <Feather name="refresh-cw" size={16} color="#8A6A48" />
         </TouchableOpacity>
       </View>
 
@@ -124,7 +142,12 @@ export default function OrderHistoryScreen() {
                 style={[styles.tabChip, isActive && styles.tabChipActive]}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.tabChipText, isActive && styles.tabChipTextActive]}>
+                <Text
+                  style={[
+                    styles.tabChipText,
+                    isActive && styles.tabChipTextActive,
+                  ]}
+                >
                   {item.label}
                 </Text>
               </TouchableOpacity>
@@ -140,12 +163,14 @@ export default function OrderHistoryScreen() {
         </View>
       ) : filteredOrders.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Feather name="package" size={56} color="#C2B8A3" />
+          <Feather name="package" size={52} color="#C2B8A3" />
           <Text style={styles.emptyTitle}>Chưa có đơn hàng nào</Text>
           <Text style={styles.emptySub}>
             {activeTab === 'all'
-              ? 'Bạn chưa thực hiện đơn đặt hàng nào tại FurnitureHub.'
-              : `Không có đơn hàng nào thuộc mục "${ORDER_TABS.find((t) => t.id === activeTab)?.label}".`}
+              ? 'Bạn chưa thực hiện đơn đặt hàng nào.'
+              : `Không có đơn hàng thuộc mục "${
+                  ORDER_TABS.find((t) => t.id === activeTab)?.label
+                }".`}
           </Text>
           <TouchableOpacity
             onPress={() => router.push('/(customer)/(tabs)/shop' as any)}
@@ -159,25 +184,41 @@ export default function OrderHistoryScreen() {
         <FlatList
           data={filteredOrders}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 24 }}
+          showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#8A6A48']} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#8A6A48"
+              colors={['#8A6A48']}
+            />
           }
           renderItem={({ item }) => {
-            const badge = getStatusBadgeStyle(item.status);
-            const totalQty = item.items?.reduce((sum, it) => sum + it.qty, 0) || 1;
+            const statusInfo = getStatusInfo(item.status);
+            const totalQty =
+              item.items?.reduce((sum, it) => sum + it.qty, 0) || 1;
 
             return (
               <TouchableOpacity
-                onPress={() => router.push(`/(customer)/orders/${item.id}` as any)}
+                onPress={() =>
+                  router.push(`/(customer)/orders/${item.id}` as any)
+                }
                 style={styles.orderCard}
-                activeOpacity={0.88}
+                activeOpacity={0.9}
               >
                 <View style={styles.cardHeader}>
-                  <Text style={styles.orderId}>#{item.orderNumber || item.id}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
-                    <Text style={[styles.statusText, { color: badge.text }]}>
-                      {item.statusLabel || item.status}
+                  <Text style={styles.orderId} numberOfLines={1}>
+                    {formatOrderId(item.id, item.orderNumber)}
+                  </Text>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      { backgroundColor: statusInfo.bg },
+                    ]}
+                  >
+                    <Text style={[styles.statusText, { color: statusInfo.text }]}>
+                      {statusInfo.label}
                     </Text>
                   </View>
                 </View>
@@ -187,18 +228,25 @@ export default function OrderHistoryScreen() {
                 {item.items && item.items.length > 0 && (
                   <Text style={styles.firstItemName} numberOfLines={1}>
                     {item.items[0].title}
-                    {item.items.length > 1 && ` và ${item.items.length - 1} sản phẩm khác`}
+                    {item.items.length > 1 &&
+                      ` và ${item.items.length - 1} sản phẩm khác`}
                   </Text>
                 )}
 
                 <View style={styles.cardFooter}>
                   <Text style={styles.itemCountText}>{totalQty} sản phẩm</Text>
-                  <Text style={styles.totalText}>{formatCurrency(item.total)}</Text>
+                  <Text style={styles.totalText}>
+                    {formatCurrency(item.total)}
+                  </Text>
                 </View>
 
                 <View style={styles.actionRow}>
                   <TouchableOpacity
-                    onPress={() => router.push(`/(customer)/orders/tracking/${item.id}` as any)}
+                    onPress={() =>
+                      router.push(
+                        `/(customer)/orders/tracking/${item.id}` as any
+                      )
+                    }
                     style={styles.trackBtn}
                     activeOpacity={0.8}
                   >
@@ -206,7 +254,7 @@ export default function OrderHistoryScreen() {
                     <Text style={styles.trackBtnText}>Theo Dõi Vận Chuyển</Text>
                   </TouchableOpacity>
 
-                  <Feather name="chevron-right" size={18} color="#8A6A48" />
+                  <Feather name="chevron-right" size={16} color="#8A6A48" />
                 </View>
               </TouchableOpacity>
             );
@@ -226,33 +274,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2DBD0',
+    borderBottomColor: '#E8E2D8',
+    backgroundColor: '#F7F4EE',
   },
   iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#E9E1D5',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EAE2D5',
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#252525',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    color: '#2A2421',
+    fontFamily: FONTS.SERIF,
+    includeFontPadding: false,
   },
   tabBar: {
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2DBD0',
+    borderBottomColor: '#E8E2D8',
     backgroundColor: '#FFFFFF',
   },
   tabContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     gap: 8,
   },
   tabChip: {
@@ -261,7 +311,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: '#F7F4EE',
     borderWidth: 1,
-    borderColor: '#E2DBD0',
+    borderColor: '#E8E2D8',
   },
   tabChipActive: {
     backgroundColor: '#8A6A48',
@@ -270,7 +320,9 @@ const styles = StyleSheet.create({
   tabChipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6E6860',
+    color: '#7A7067',
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
   },
   tabChipTextActive: {
     color: '#FFFFFF',
@@ -284,7 +336,9 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 13,
-    color: '#6E6860',
+    color: '#7A7067',
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
   },
   emptyContainer: {
     flex: 1,
@@ -293,54 +347,65 @@ const styles = StyleSheet.create({
     padding: 32,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#252525',
+    color: '#2A2421',
+    fontFamily: FONTS.SERIF,
     marginTop: 16,
     marginBottom: 8,
+    includeFontPadding: false,
   },
   emptySub: {
-    fontSize: 13,
-    color: '#6E6860',
+    fontSize: 12,
+    color: '#7A7067',
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
+    lineHeight: 18,
+    marginBottom: 20,
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
   },
   exploreBtn: {
     backgroundColor: '#8A6A48',
-    paddingVertical: 13,
-    paddingHorizontal: 26,
-    borderRadius: 22,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 20,
   },
   exploreBtnText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1,
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
   },
   orderCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 16,
+    borderRadius: 16,
+    padding: 14,
     borderWidth: 1,
-    borderColor: '#E2DBD0',
-    marginBottom: 14,
-    shadowColor: '#000',
+    borderColor: '#E8E2D8',
+    marginBottom: 12,
+    shadowColor: '#5C4A3A',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
+    overflow: 'hidden',
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 4,
+    gap: 8,
   },
   orderId: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
-    color: '#252525',
+    color: '#2A2421',
+    fontFamily: FONTS.SANS,
+    flex: 1,
+    includeFontPadding: false,
   },
   statusBadge: {
     paddingVertical: 3,
@@ -351,41 +416,51 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
   },
   dateText: {
-    fontSize: 12,
-    color: '#6E6860',
+    fontSize: 11,
+    color: '#7A7067',
     marginBottom: 8,
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
   },
   firstItemName: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#252525',
+    color: '#2A2421',
     marginBottom: 10,
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
   },
   cardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderTopWidth: 1,
-    borderTopColor: '#E2DBD0',
-    paddingTop: 10,
-    marginBottom: 10,
+    borderTopColor: '#F2ECE4',
+    paddingTop: 8,
+    marginBottom: 8,
   },
   itemCountText: {
-    fontSize: 12,
-    color: '#6E6860',
+    fontSize: 11,
+    color: '#7A7067',
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
   },
   totalText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: '#8A6A48',
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
   },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F7F4EE',
+    backgroundColor: '#F9F6F0',
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
@@ -396,8 +471,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   trackBtnText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#8A6A48',
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
   },
 });

@@ -649,10 +649,10 @@ export const LOOKBOOK_ITEM: Lookbook = {
 
 Bằng việc kết hợp những gam màu trung tính như be, kem, kết hợp cùng chất liệu vải Bouclé Ý xù nhẹ và gỗ sồi tự nhiên đạt tiêu chuẩn bền vững, Lumora đem đến các bộ sưu tập nội thất vượt thời gian. Mỗi chi tiết đều được gọt dũa tỉ mỉ từ đôi bàn tay của những thợ thủ công lành nghề.`,
   image:
-    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1000&auto=format&fit=crop&q=80',
+    'https://decoviet.vn/wp-content/uploads/thi-cong-noi-that-vung-tau.jpg',
   author: 'Elena Rostova',
   authorAvatar:
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+    'https://wp-cms-media.s3.ap-east-1.amazonaws.com/lay_anh_dai_dien_facebook_dep_5_d472871f1d.jpg',
 };
 
 export const BRAND_PILLARS: PillarItem[] = [
