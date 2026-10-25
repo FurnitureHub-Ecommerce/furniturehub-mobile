@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,44 +6,99 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
-  Platform,
+  Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { Product } from '@/services/mockData';
+import { formatCurrency } from '@/services/api';
 
 const { width } = Dimensions.get('window');
-// Calculate width for 2 columns grid with padding
 const CARD_WIDTH = (width - 40 - 12) / 2;
 
 interface ProductCardProps {
-  item: Product;
+  item: any;
   isWishlisted: boolean;
   onToggleWishlist: (id: string) => void;
-  onAddToCart: (product: Product) => void;
+  onAddToCart: (product: any) => void;
   onPress: (id: string) => void;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = React.memo(
   ({ item, isWishlisted, onToggleWishlist, onAddToCart, onPress }) => {
+    const productId = String(item.id || item._id);
+
+    const btnScale = useRef(new Animated.Value(1)).current;
+    const [isAdding, setIsAdding] = useState(false);
+
+    // Kiểm tra hết hàng từ dữ liệu thật của Backend:
+    // Hết hàng nếu availableStock <= 0 hoặc inStock === false hoặc stockCount <= 0
+    const isOutOfStock = useMemo(() => {
+      if (item.availableStock !== undefined && Number(item.availableStock) <= 0) {
+        return true;
+      }
+      if (item.stockCount !== undefined && Number(item.stockCount) <= 0) {
+        return true;
+      }
+      if (item.inStock === false || item.isActive === false) {
+        return true;
+      }
+      return false;
+    }, [item]);
+
+    const imageUri =
+      item.image ||
+      (Array.isArray(item.images) && item.images[0]) ||
+      item.imageUrl ||
+      'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?q=80&w=600';
+
+    const numericRating = Number(item.rating) || 5.0;
+    const numericPrice = Number(item.price || item.minPrice) || 0;
+    const numericOriginalPrice = item.originalPrice ? Number(item.originalPrice) : null;
+    const reviewCount = Number(item.reviewCount) || 0;
+
+    const handleQuickAdd = useCallback(
+      (e: any) => {
+        e.stopPropagation();
+        if (isOutOfStock) return; // Chặn nếu hết hàng
+
+        Animated.sequence([
+          Animated.timing(btnScale, { toValue: 0.8, duration: 80, useNativeDriver: true }),
+          Animated.spring(btnScale, { toValue: 1, friction: 3, useNativeDriver: true }),
+        ]).start();
+
+        setIsAdding(true);
+        setTimeout(() => setIsAdding(false), 500);
+
+        onAddToCart(item);
+      },
+      [item, isOutOfStock, onAddToCart, btnScale]
+    );
+
     return (
       <TouchableOpacity
-        onPress={() => onPress(item.id)}
-        style={styles.card}
+        onPress={() => onPress(productId)}
+        style={[styles.card, isOutOfStock && styles.cardDisabled]}
         activeOpacity={0.92}
       >
-        {/* Image & Wishlist Button */}
+        {/* Ảnh, Badge Hết Hàng & Nút Wishlist */}
         <View style={styles.imageWrapper}>
-          <Image source={{ uri: item.image }} style={styles.image} />
-          {item.tag && (
+          <Image source={{ uri: imageUri }} style={[styles.image, isOutOfStock && styles.imageMuted]} />
+          
+          {/* Badge trạng thái Hết Hàng hoặc Tag khuyến mãi */}
+          {isOutOfStock ? (
+            <View style={styles.outOfStockBadge}>
+              <Text style={styles.outOfStockBadgeText}>HẾT HÀNG</Text>
+            </View>
+          ) : item.tag ? (
             <View style={styles.badgeTag}>
               <Text style={styles.badgeText}>{item.tag}</Text>
             </View>
-          )}
+          ) : null}
 
           <TouchableOpacity
             onPress={(e) => {
               e.stopPropagation();
-              onToggleWishlist(item.id);
+              onToggleWishlist(productId);
             }}
             style={styles.wishlistBtn}
             activeOpacity={0.8}
@@ -57,61 +112,58 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(
           </TouchableOpacity>
         </View>
 
-        {/* Content Info */}
+        {/* Thông tin sản phẩm */}
         <View style={styles.infoWrapper}>
           <Text style={styles.brandCategory} numberOfLines={1}>
-            {item.brand || item.category}
+            {typeof item.brand === 'object' ? item.brand?.name : item.brand || item.category || 'NỘI THẤT'}
           </Text>
 
           <Text style={styles.title} numberOfLines={2}>
-            {item.title}
+            {item.title || item.name || 'Sản phẩm'}
           </Text>
 
           {/* Rating */}
           <View style={styles.ratingRow}>
             <Ionicons name="star" size={12} color="#ddab61" />
-            <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
-            <Text style={styles.reviewCount}>({item.reviewCount})</Text>
+            <Text style={styles.ratingText}>{numericRating.toFixed(1)}</Text>
+            {reviewCount > 0 ? (
+              <Text style={styles.reviewCount}>({reviewCount})</Text>
+            ) : null}
           </View>
 
-          {/* Color Variant Swatches Dots (Task 4 & 5) */}
-          {item.colors && item.colors.length > 0 && (
-            <View style={styles.colorDotsRow}>
-              {item.colors.slice(0, 3).map((c) => (
-                <View
-                  key={c.id}
-                  style={[styles.colorDot, { backgroundColor: c.hex }]}
-                />
-              ))}
-              {item.colors.length > 3 && (
-                <Text style={styles.moreColorsText}>
-                  +{item.colors.length - 3}
-                </Text>
-              )}
-            </View>
-          )}
-
-          {/* Price & Add to Cart button */}
+          {/* Giá & Nút Thêm vào giỏ */}
           <View style={styles.priceRow}>
             <View style={styles.priceGroup}>
-              <Text style={styles.price}>${item.price.toLocaleString()}</Text>
-              {item.originalPrice && (
+              <Text style={[styles.price, isOutOfStock && styles.priceMuted]}>
+                {formatCurrency(numericPrice)}
+              </Text>
+              {numericOriginalPrice ? (
                 <Text style={styles.originalPrice}>
-                  ${item.originalPrice.toLocaleString()}
+                  {formatCurrency(numericOriginalPrice)}
                 </Text>
-              )}
+              ) : null}
             </View>
 
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation();
-                onAddToCart(item);
-              }}
-              style={styles.addCartBtn}
-              activeOpacity={0.8}
-            >
-              <Feather name="plus" size={14} color="#FFFFFF" />
-            </TouchableOpacity>
+            <Animated.View style={{ transform: [{ scale: btnScale }] }}>
+              <TouchableOpacity
+                onPress={handleQuickAdd}
+                disabled={isOutOfStock}
+                style={[
+                  styles.addCartBtn,
+                  isAdding && styles.addCartBtnActive,
+                  isOutOfStock && styles.addCartBtnDisabled,
+                ]}
+                activeOpacity={0.85}
+              >
+                {isAdding ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : isOutOfStock ? (
+                  <Feather name="slash" size={13} color="#A1998E" />
+                ) : (
+                  <Feather name="plus" size={15} color="#FFFFFF" />
+                )}
+              </TouchableOpacity>
+            </Animated.View>
           </View>
         </View>
       </TouchableOpacity>
@@ -136,6 +188,10 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
+  cardDisabled: {
+    borderColor: '#EAE5DC',
+    backgroundColor: '#FAFAF8',
+  },
   imageWrapper: {
     width: '100%',
     height: 145,
@@ -146,6 +202,9 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+  },
+  imageMuted: {
+    opacity: 0.45,
   },
   badgeTag: {
     position: 'absolute',
@@ -162,6 +221,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
+  outOfStockBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: '#3A3835',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  outOfStockBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
   wishlistBtn: {
     position: 'absolute',
     top: 8,
@@ -172,11 +246,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.92)',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   infoWrapper: {
     padding: 10,
@@ -202,7 +271,7 @@ const styles = StyleSheet.create({
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   ratingText: {
     fontSize: 11,
@@ -215,24 +284,6 @@ const styles = StyleSheet.create({
     color: '#6E6860',
     marginLeft: 2,
   },
-  colorDotsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginBottom: 8,
-  },
-  colorDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.15)',
-  },
-  moreColorsText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#6E6860',
-  },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -241,11 +292,15 @@ const styles = StyleSheet.create({
   },
   priceGroup: {
     flexDirection: 'column',
+    flex: 1,
   },
   price: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#8A6A48',
+  },
+  priceMuted: {
+    color: '#9E978E',
   },
   originalPrice: {
     fontSize: 11,
@@ -253,11 +308,19 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
   },
   addCartBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: '#8A6A48',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  addCartBtnActive: {
+    backgroundColor: '#27AE60',
+  },
+  addCartBtnDisabled: {
+    backgroundColor: '#EBE5DC',
+    borderWidth: 1,
+    borderColor: '#D8D0C3',
   },
 });

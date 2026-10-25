@@ -72,7 +72,7 @@ export default function RegisterScreen() {
 
   return (
     <ImageBackground
-      source={{ uri: 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?q=80&w=1000&auto=format&fit=crop' }}
+      source={{ uri: 'https://noithatmanhhe.vn/wp-content/uploads/2024/03/thiet-ke-noi-that-phong-khach-1.jpg' }}
       style={styles.background}
     >
       <View style={styles.overlay}>
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '300', color: '#FFF', letterSpacing: 3, marginBottom: 4, textAlign: 'center', fontFamily: Platform.OS === 'ios' ? 'Didot' : 'serif' },
   subtitle: { fontSize: 13, color: '#D5CEC5', textAlign: 'center' },
   card: { backgroundColor: '#F9F6F0', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 30, marginHorizontal: -20, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 5 },
-  label: { fontSize: 10, fontWeight: '700', color: '#8A6A48', letterSpacing: 1.5, marginBottom: 4, marginTop: 10 },
+  label: { fontSize: 12, fontWeight: '700', color: '#8A6A48', marginBottom: 4, marginTop: 10, fontFamily: "Nunito" },
   input: { height: 46, backgroundColor: '#FFFFFF', borderRadius: 10, borderWidth: 1, borderColor: '#E2DBD0', paddingHorizontal: 14, fontSize: 14, color: '#252525' },
   passwordContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 10, borderWidth: 1, borderColor: '#E2DBD0', height: 46, paddingHorizontal: 14 },
   passwordInput: { flex: 1, fontSize: 14, color: '#252525' },

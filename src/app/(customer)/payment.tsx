@@ -9,81 +9,122 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Image,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useApp } from '@/context/AppContext';
 import { createOrderApi, formatCurrency } from '@/services/api';
+
+const FONTS = {
+  SERIF: Platform.OS === 'ios' ? 'Didot' : 'serif',
+  SANS: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+};
+
+type PaymentMethodType = 'cod' | 'qr' | 'card' | 'wallet';
 
 export default function PaymentScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
-    fullName?: string;
-    street?: string;
-    city?: string;
+    addressId?: string;
+    receiverName?: string;
     phone?: string;
+    addressLine?: string;
+    ward?: string;
+    city?: string;
+    fullAddress?: string;
   }>();
 
   const { cart, subtotal, shipping, total, clearCart } = useApp();
-  const [selectedMethod, setSelectedMethod] = useState<'card' | 'wallet' | 'bank'>('card');
-  const [cardNumber, setCardNumber] = useState('4532 8921 7842 1093');
-  const [cardExpiry, setCardExpiry] = useState('09 / 28');
-  const [cardCvv, setCardCvv] = useState('882');
+  
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethodType>('cod');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
+  
   const [processing, setProcessing] = useState(false);
 
-  const handlePlaceOrder = async () => {
+  const getPaymentMethodLabel = () => {
+    switch (selectedMethod) {
+      case 'cod':
+        return 'Thanh toán tiền mặt khi nhận hàng (COD)';
+      case 'qr':
+        return 'Chuyển khoản Ngân hàng (Mã QR VietQR)';
+      case 'card':
+        return 'Thẻ Tín Dụng / Ghi Nợ Quốc Tế';
+      case 'wallet':
+        return 'Ví Điện Tử Apple Pay / MoMo';
+      default:
+        return 'Thanh toán khi nhận hàng';
+    }
+  };
+
+ const handlePlaceOrder = async () => {
+    if (cart.length === 0) {
+      Alert.alert('Giỏ hàng trống', 'Vui lòng chọn sản phẩm trước khi đặt hàng.');
+      return;
+    }
+
+    // Lấy addressId từ params
+    const addressId = params.addressId;
+
+    if (!addressId) {
+      Alert.alert('Lỗi địa chỉ', 'Không tìm thấy ID địa chỉ giao hàng hợp lệ. Vui lòng quay lại chọn địa chỉ.');
+      return;
+    }
+
     try {
       setProcessing(true);
 
+      // KHỚP 100% SWAGGER: Request Body CHỈ gửi duy nhất addressId
       const orderPayload = {
-        items: cart.map((item) => ({
-          id: item.product.id,
-          productId: item.product.id,
-          title: item.product.title,
-          price: item.product.price + (item.selectedOption?.priceAdjustment || 0),
-          qty: item.quantity,
-          image: item.product.image,
-          color: item.selectedColor?.name,
-          option: item.selectedOption?.name,
-        })),
-        subtotal,
-        shipping,
-        total,
-        paymentMethod:
-          selectedMethod === 'card'
-            ? 'Thẻ Tín Dụng (Visa)'
-            : selectedMethod === 'wallet'
-            ? 'Ví Điện Tử Apple Pay'
-            : 'Chuyển Khoản Ngân Hàng Concierge',
-        shippingAddress: {
-          fullName: params.fullName || 'Nam Anh',
-          phone: params.phone || '0901 234 567',
-          street: params.street || '742 Evergreen Terrace, Phường Bến Nghé, Quận 1',
-          city: params.city || 'TP. Hồ Chí Minh',
-        },
+        addressId: String(addressId),
       };
 
       const result = await createOrderApi(orderPayload);
       clearCart();
 
-      const createdId = result?.order?.id || 'LUM-89210';
+      // Bóc tách _id của đơn hàng được tạo thành công
+      const realOrderId =
+        result?.order?._id ||
+        result?.order?.id ||
+        result?._id ||
+        result?.id ||
+        result?.data?._id ||
+        result?.data?.id;
 
-      Alert.alert(
-        'Đặt Hàng Thành Công',
-        `Cảm ơn bạn! Đơn hàng #${createdId} đã được tiếp nhận và nhân viên chăm sóc Concierge đang xử lý.`,
-        [
-          {
-            text: 'Xem Chi Tiết Đơn Hàng',
-            onPress: () => router.replace(`/(customer)/orders/${createdId}` as any),
-          },
-          {
-            text: 'Theo Dõi Vận Chuyển',
-            onPress: () => router.replace(`/(customer)/orders/tracking/${createdId}` as any),
-          },
-        ]
-      );
+      if (realOrderId) {
+        Alert.alert(
+          'Đặt Hàng Thành Công',
+          `Cảm ơn bạn! Đơn hàng #${realOrderId} đã được ghi nhận thành công trên hệ thống.`,
+          [
+            {
+              text: 'Xem Đơn Hàng',
+              onPress: () => router.replace('/(customer)/orders' as any),
+            },
+            {
+              text: 'Theo Dõi Giao Hàng',
+              onPress: () =>
+                router.replace(`/(customer)/orders/tracking/${realOrderId}` as any),
+            },
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Đặt Hàng Thành Công',
+          'Cảm ơn bạn! Đơn hàng của bạn đã được ghi nhận thành công.',
+          [
+            {
+              text: 'Xem Đơn Hàng',
+              onPress: () => router.replace('/(customer)/orders' as any),
+            },
+          ]
+        );
+      }
     } catch (err: any) {
+      console.warn('Lỗi tạo đơn hàng:', err);
       Alert.alert('Lỗi đặt hàng', err.message || 'Không thể tạo đơn hàng vào lúc này.');
     } finally {
       setProcessing(false);
@@ -92,6 +133,8 @@ export default function PaymentScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -99,81 +142,172 @@ export default function PaymentScreen() {
           style={styles.iconButton}
           activeOpacity={0.7}
         >
-          <Feather name="arrow-left" size={20} color="#252525" />
+          <Feather name="arrow-left" size={18} color="#2A2421" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Phương Thức Thanh Toán</Text>
-        <View style={{ width: 40 }} />
+        <Text style={[styles.headerTitle, { fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif' }]}>
+          Phương Thức Thanh Toán
+        </Text>
+        <View style={{ width: 36 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.sectionTag}>BƯỚC 2 / 2: CHỌN HÌNH THỨC THANH TOÁN</Text>
+        <View style={styles.stepBox}>
+          <Text style={styles.stepBadge}>BƯỚC 2 / 2</Text>
+          <Text style={styles.stepSub}>Vui lòng chọn hình thức thanh toán phù hợp nhất với bạn</Text>
+        </View>
 
-        {/* 1. Credit / Debit Card */}
+        {/* 1. Trả Tiền Mặt Khi Nhận Hàng (COD) */}
+        <TouchableOpacity
+          onPress={() => setSelectedMethod('cod')}
+          style={[styles.methodCard, selectedMethod === 'cod' && styles.methodCardActive]}
+          activeOpacity={0.8}
+        >
+          <View style={styles.methodHeader}>
+            <View style={styles.iconCircle}>
+              <Feather name="dollar-sign" size={18} color="#8A6A48" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.methodTitle}>Thanh toán tiền mặt khi nhận hàng (COD)</Text>
+              <Text style={styles.methodSub}>Kiểm tra sản phẩm tận nhà & thanh toán trực tiếp</Text>
+            </View>
+            <Ionicons
+              name={selectedMethod === 'cod' ? 'radio-button-on' : 'radio-button-off'}
+              size={20}
+              color={selectedMethod === 'cod' ? '#8A6A48' : '#A0988E'}
+            />
+          </View>
+
+          {selectedMethod === 'cod' && (
+            <View style={styles.methodDetailBox}>
+              <Text style={styles.detailNoticeText}>
+                • Đội ngũ giao hàng White-Glove sẽ đồng kiểm sản phẩm cùng bạn trước khi nhận tiền.{'\n'}
+                • Hỗ trợ tiền mặt hoặc quẹt thẻ máy POS tận nơi.
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        {/* 2. Chuyển Khoản Ngân Hàng Qua Mã QR (VietQR) */}
+        <TouchableOpacity
+          onPress={() => setSelectedMethod('qr')}
+          style={[styles.methodCard, selectedMethod === 'qr' && styles.methodCardActive]}
+          activeOpacity={0.8}
+        >
+          <View style={styles.methodHeader}>
+            <View style={styles.iconCircle}>
+              <Ionicons name="qr-code-outline" size={18} color="#8A6A48" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.methodTitle}>Chuyển khoản Ngân hàng (Mã QR VietQR)</Text>
+              <Text style={styles.methodSub}>Quét mã QR thanh toán nhanh qua ứng dụng ngân hàng</Text>
+            </View>
+            <Ionicons
+              name={selectedMethod === 'qr' ? 'radio-button-on' : 'radio-button-off'}
+              size={20}
+              color={selectedMethod === 'qr' ? '#8A6A48' : '#A0988E'}
+            />
+          </View>
+
+          {selectedMethod === 'qr' && (
+            <View style={styles.qrContainer}>
+              <Text style={styles.qrInstruction}>Mở app Ngân hàng và quét mã QR bên dưới:</Text>
+              
+              <View style={styles.qrCodeBox}>
+                <Image
+                  source={{
+                    uri: `https://api.vietqr.io/image/970436-102870419201-qr_only.jpg?amount=${total}&addInfo=LUMORA%20THANH%20TOAN&accountName=LUMORA%20STUDIO`,
+                  }}
+                  style={styles.qrImage}
+                  resizeMode="contain"
+                />
+              </View>
+
+              <View style={styles.bankInfoCard}>
+                <View style={styles.bankInfoRow}>
+                  <Text style={styles.bankLabel}>Ngân hàng:</Text>
+                  <Text style={styles.bankVal}>Vietcombank (VCB)</Text>
+                </View>
+                <View style={styles.bankInfoRow}>
+                  <Text style={styles.bankLabel}>Số tài khoản:</Text>
+                  <Text style={styles.bankValBold}>1028 7041 9201</Text>
+                </View>
+                <View style={styles.bankInfoRow}>
+                  <Text style={styles.bankLabel}>Chủ tài khoản:</Text>
+                  <Text style={styles.bankVal}>LUMORA STUDIO VIETNAM</Text>
+                </View>
+                <View style={styles.bankInfoRow}>
+                  <Text style={styles.bankLabel}>Số tiền:</Text>
+                  <Text style={styles.bankValAmount}>{formatCurrency(total)}</Text>
+                </View>
+              </View>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        {/* 3. Thẻ Tín Dụng / Ghi Nợ Quốc Tế */}
         <TouchableOpacity
           onPress={() => setSelectedMethod('card')}
           style={[styles.methodCard, selectedMethod === 'card' && styles.methodCardActive]}
           activeOpacity={0.8}
         >
           <View style={styles.methodHeader}>
-            <View style={styles.iconBox}>
-              <Feather name="credit-card" size={20} color="#8A6A48" />
+            <View style={styles.iconCircle}>
+              <Feather name="credit-card" size={18} color="#8A6A48" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.methodTitle}>Thẻ Tín Dụng / Ghi Nợ Quốc Tế</Text>
-              <Text style={styles.methodSub}>Hỗ trợ Visa, MasterCard, JCB, Amex</Text>
+              <Text style={styles.methodSub}>Visa, MasterCard, JCB, American Express</Text>
             </View>
             <Ionicons
               name={selectedMethod === 'card' ? 'radio-button-on' : 'radio-button-off'}
-              size={22}
-              color={selectedMethod === 'card' ? '#8A6A48' : '#C2B8A3'}
+              size={20}
+              color={selectedMethod === 'card' ? '#8A6A48' : '#A0988E'}
             />
           </View>
 
           {selectedMethod === 'card' && (
             <View style={styles.cardForm}>
-              <Text style={styles.label}>SỐ THẺ THANH TOÁN</Text>
-              <View style={styles.inputContainer}>
-                <View style={styles.fieldIconBox}>
-                  <Feather name="credit-card" size={16} color="#8A6A48" />
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>SỐ THẺ THANH TOÁN *</Text>
+                <View style={styles.inputWrapper}>
+                  <Feather name="credit-card" size={15} color="#8A6A48" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.inputText}
+                    placeholder="4532 •••• •••• 8921"
+                    placeholderTextColor="#A0988E"
+                    keyboardType="numeric"
+                    value={cardNumber}
+                    onChangeText={setCardNumber}
+                  />
                 </View>
-                <TextInput
-                  style={styles.input}
-                  placeholder="4532 •••• •••• 8921"
-                  placeholderTextColor="#A0988E"
-                  keyboardType="numeric"
-                  value={cardNumber}
-                  onChangeText={setCardNumber}
-                />
               </View>
 
-              <View style={styles.rowGroup}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.label}>HẠN DÙNG (MM/YY)</Text>
-                  <View style={styles.inputContainer}>
-                    <View style={styles.fieldIconBox}>
-                      <Feather name="calendar" size={16} color="#8A6A48" />
-                    </View>
+              <View style={styles.rowGrid}>
+                <View style={[styles.fieldGroup, { flex: 1 }]}>
+                  <Text style={styles.fieldLabel}>HẠN DÙNG (MM/YY) *</Text>
+                  <View style={styles.inputWrapper}>
+                    <Feather name="calendar" size={15} color="#8A6A48" style={styles.inputIcon} />
                     <TextInput
-                      style={styles.input}
-                      placeholder="09 / 28"
+                      style={styles.inputText}
+                      placeholder="08/28"
                       placeholderTextColor="#A0988E"
                       value={cardExpiry}
                       onChangeText={setCardExpiry}
                     />
                   </View>
                 </View>
-                <View style={{ width: 120 }}>
-                  <Text style={styles.label}>MÃ BẢO MẬT CVV</Text>
-                  <View style={styles.inputContainer}>
-                    <View style={styles.fieldIconBox}>
-                      <Feather name="lock" size={16} color="#8A6A48" />
-                    </View>
+
+                <View style={[styles.fieldGroup, { width: 110 }]}>
+                  <Text style={styles.fieldLabel}>MÃ CVV *</Text>
+                  <View style={styles.inputWrapper}>
+                    <Feather name="lock" size={15} color="#8A6A48" style={styles.inputIcon} />
                     <TextInput
-                      style={styles.input}
-                      placeholder="882"
+                      style={styles.inputText}
+                      placeholder="888"
                       placeholderTextColor="#A0988E"
-                      secureTextEntry
                       keyboardType="numeric"
+                      secureTextEntry
+                      maxLength={4}
                       value={cardCvv}
                       onChangeText={setCardCvv}
                     />
@@ -184,80 +318,59 @@ export default function PaymentScreen() {
           )}
         </TouchableOpacity>
 
-        {/* 2. Apple Pay / Google Wallet */}
+        {/* 4. Ví Điện Tử Một Chạm */}
         <TouchableOpacity
           onPress={() => setSelectedMethod('wallet')}
           style={[styles.methodCard, selectedMethod === 'wallet' && styles.methodCardActive]}
           activeOpacity={0.8}
         >
           <View style={styles.methodHeader}>
-            <View style={styles.iconBox}>
-              <Feather name="smartphone" size={20} color="#8A6A48" />
+            <View style={styles.iconCircle}>
+              <Feather name="smartphone" size={18} color="#8A6A48" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.methodTitle}>Ví Điện Tử Một Chạm</Text>
-              <Text style={styles.methodSub}>Apple Pay, Google Pay, MoMo Concierge</Text>
+              <Text style={styles.methodSub}>Apple Pay, Google Pay, MoMo, ZaloPay</Text>
             </View>
             <Ionicons
               name={selectedMethod === 'wallet' ? 'radio-button-on' : 'radio-button-off'}
-              size={22}
-              color={selectedMethod === 'wallet' ? '#8A6A48' : '#C2B8A3'}
+              size={20}
+              color={selectedMethod === 'wallet' ? '#8A6A48' : '#A0988E'}
             />
           </View>
         </TouchableOpacity>
 
-        {/* 3. Bank Transfer Concierge */}
-        <TouchableOpacity
-          onPress={() => setSelectedMethod('bank')}
-          style={[styles.methodCard, selectedMethod === 'bank' && styles.methodCardActive]}
-          activeOpacity={0.8}
-        >
-          <View style={styles.methodHeader}>
-            <View style={styles.iconBox}>
-              <Feather name="globe" size={20} color="#8A6A48" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.methodTitle}>Chuyển Khoản Ngân Hàng Concierge</Text>
-              <Text style={styles.methodSub}>Xác nhận thanh toán tự động qua mã QR</Text>
-            </View>
-            <Ionicons
-              name={selectedMethod === 'bank' ? 'radio-button-on' : 'radio-button-off'}
-              size={22}
-              color={selectedMethod === 'bank' ? '#8A6A48' : '#C2B8A3'}
-            />
-          </View>
-        </TouchableOpacity>
-
-        {/* Payment Summary */}
-        <View style={styles.summaryCard}>
+        {/* Tổng Hóa Đơn */}
+        <View style={styles.summaryBox}>
           <Text style={styles.summaryTitle}>TỔNG KẾT HÓA ĐƠN</Text>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Tạm tính tiền hàng</Text>
             <Text style={styles.summaryVal}>{formatCurrency(subtotal)}</Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Phí giao hàng cao cấp</Text>
+            <Text style={styles.summaryLabel}>Phí giao hàng White-Glove</Text>
             <Text style={styles.summaryVal}>{formatCurrency(shipping)}</Text>
           </View>
-          <View style={[styles.summaryRow, styles.totalRow]}>
-            <Text style={styles.totalLabel}>Tổng số tiền thanh toán</Text>
+          <View style={styles.dividerLine} />
+          <View style={styles.summaryRow}>
+            <Text style={styles.totalLabel}>Tổng thanh toán</Text>
             <Text style={styles.totalVal}>{formatCurrency(total)}</Text>
           </View>
         </View>
       </ScrollView>
 
-      {/* Complete Order Footer */}
-      <View style={styles.footer}>
+      {/* Footer CTA */}
+      <View style={styles.footerBar}>
         <TouchableOpacity
           onPress={handlePlaceOrder}
           disabled={processing}
-          style={[styles.primaryBtn, processing && { opacity: 0.7 }]}
+          style={[styles.payBtn, processing && { opacity: 0.7 }]}
           activeOpacity={0.88}
         >
           {processing ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color="#FFFFFF" size="small" />
           ) : (
-            <Text style={styles.primaryBtnText}>
+            <Text style={styles.payBtnText}>
               XÁC NHẬN ĐẶT HÀNG ({formatCurrency(total)})
             </Text>
           )}
@@ -276,54 +389,63 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2DBD0',
+    borderBottomColor: '#E8E2D8',
+    backgroundColor: '#F7F4EE',
   },
   iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#E9E1D5',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EAE2D5',
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#252525',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    color: '#2A2421',
   },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 110,
+    padding: 16,
+    paddingBottom: 100,
   },
-  sectionTag: {
-    fontSize: 11,
+  stepBox: {
+    marginBottom: 16,
+  },
+  stepBadge: {
+    fontSize: 15.5,
     fontWeight: '700',
     color: '#8A6A48',
-    letterSpacing: 1.5,
-    marginBottom: 16,
+    marginBottom: 2,
+    textAlign: 'center',
+  },
+  stepSub: {
+    fontSize: 12,
+    color: '#7A7067',
+    textAlign: 'center',
+    marginTop: 3,
   },
   methodCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
-    padding: 16,
+    padding: 14,
     borderWidth: 1,
-    borderColor: '#E2DBD0',
-    marginBottom: 14,
+    borderColor: '#E8E2D8',
+    marginBottom: 12,
   },
   methodCardActive: {
     borderColor: '#8A6A48',
-    borderWidth: 1.5,
+    backgroundColor: '#FAF7F2',
   },
   methodHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
-  iconBox: {
+  iconCircle: {
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -332,130 +454,194 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   methodTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#252525',
+    color: '#2A2421',
   },
   methodSub: {
     fontSize: 11,
-    color: '#6E6860',
+    color: '#7A7067',
     marginTop: 2,
   },
-  cardForm: {
-    marginTop: 16,
-    paddingTop: 16,
+  methodDetailBox: {
+    marginTop: 12,
+    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#E2DBD0',
+    borderTopColor: '#E8E2D8',
   },
-  label: {
+  detailNoticeText: {
+    fontSize: 11.5,
+    color: '#6E6860',
+    lineHeight: 18,
+  },
+  qrContainer: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E8E2D8',
+    alignItems: 'center',
+  },
+  qrInstruction: {
+    fontSize: 11.5,
+    color: '#7A7067',
+    marginBottom: 10,
+  },
+  qrCodeBox: {
+    width: 170,
+    height: 170,
+    backgroundColor: '#FFFFFF',
+    padding: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E8E2D8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  qrImage: {
+    width: '100%',
+    height: '100%',
+  },
+  bankInfoCard: {
+    width: '100%',
+    backgroundColor: '#F7F4EE',
+    borderRadius: 10,
+    padding: 12,
+    gap: 6,
+  },
+  bankInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  bankLabel: {
+    fontSize: 11.5,
+    color: '#7A7067',
+  },
+  bankVal: {
+    fontSize: 12,
+    color: '#2A2421',
+    fontWeight: '600',
+  },
+  bankValBold: {
+    fontSize: 12.5,
+    color: '#2A2421',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  bankValAmount: {
+    fontSize: 13.5,
+    color: '#8A6A48',
+    fontWeight: '700',
+  },
+  cardForm: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E8E2D8',
+  },
+  fieldGroup: {
+    marginBottom: 10,
+  },
+  fieldLabel: {
     fontSize: 10,
     fontWeight: '700',
     color: '#8A6A48',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
     marginBottom: 6,
-    marginTop: 8,
   },
-  // Ô nhập liệu fix triệt để khoảng cách padding icon
-  inputContainer: {
+  inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 46,
-    backgroundColor: '#F7F4EE',
+    height: 44,
+    backgroundColor: '#FAF7F2',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E2DBD0',
+    borderColor: '#E8E2D8',
     paddingHorizontal: 12,
-    marginBottom: 6,
   },
-  fieldIconBox: {
-    width: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
+  inputIcon: {
     marginRight: 8,
   },
-  input: {
+  inputText: {
     flex: 1,
     fontSize: 13,
-    color: '#252525',
-    paddingVertical: 0,
+    color: '#2A2421',
     height: '100%',
   },
-  rowGroup: {
+  rowGrid: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
-  summaryCard: {
+  summaryBox: {
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E2DBD0',
-    marginTop: 10,
+    borderColor: '#E8E2D8',
+    marginTop: 4,
   },
   summaryTitle: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '700',
     color: '#8A6A48',
-    letterSpacing: 1.2,
+    
     marginBottom: 10,
+    fontFamily: Platform.OS === 'ios' ? 'serif' : 'serif',
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   summaryLabel: {
-    fontSize: 13,
-    color: '#6E6860',
+    fontSize: 12,
+    color: '#7A7067',
   },
   summaryVal: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '600',
-    color: '#252525',
+    color: '#2A2421',
   },
-  totalRow: {
-    borderTopWidth: 1,
-    borderTopColor: '#E2DBD0',
-    paddingTop: 8,
-    marginTop: 4,
+  dividerLine: {
+    height: 1,
+    backgroundColor: '#F2ECE4',
+    marginVertical: 6,
   },
   totalLabel: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '700',
-    color: '#252525',
+    color: '#2A2421',
   },
   totalVal: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#8A6A48',
   },
-  footer: {
+  footerBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     backgroundColor: '#F7F4EE',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E2DBD0',
+    borderTopColor: '#E8E2D8',
   },
-  primaryBtn: {
-    height: 52,
+  payBtn: {
+    height: 48,
     backgroundColor: '#8A6A48',
-    borderRadius: 26,
+    borderRadius: 24,
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#8A6A48',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 3,
   },
-  primaryBtnText: {
+  payBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: '700',
-    letterSpacing: 1.2,
+    letterSpacing: 0.2,
+    fontFamily: Platform.OS === 'ios' ? 'serif' : 'serif',
   },
 });

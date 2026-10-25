@@ -39,11 +39,7 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  logoImage: {
-    width: 145,
-    height: 38,
-    resizeMode: "contain",
-  },
+ 
   logoFallbackText: {
     fontSize: 20,
     fontWeight: "700",
@@ -147,11 +143,14 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 4,
   },
-  uspTitle: {
-    fontSize: 11,
+ uspTitle: {
+    fontSize: 9,
     fontWeight: "600",
     color: "#2A2421",
     textAlign: "center",
+    lineHeight: 15,   
+    includeFontPadding: false, 
+    textAlignVertical: "center",
   },
   uspDivider: {
     width: 1,
@@ -168,12 +167,12 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
     marginBottom: 12,
+    marginTop: 16,
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: "600",
+    fontWeight: "700",
     color: COLORS.TEXT_DARK,
-    fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
   },
   sectionLink: {
     flexDirection: "row",
@@ -347,121 +346,154 @@ export const styles = StyleSheet.create({
   // Products Grid
   productsGridContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingBottom: 0,
   },
   columnWrapper: {
     justifyContent: "space-between",
     marginBottom: 16,
   },
-  productCard: {
+ productCard: {
     width: COLUMN_WIDTH,
     backgroundColor: COLORS.CARD_BG,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.BORDER_COLOR,
-    overflow: "hidden",
+    // Android bắt buộc có overflow: 'hidden' để ảnh không trùm ra ngoài viền bo tròn
+    overflow: "hidden", 
+    // Tối ưu đổ bóng mềm mượt trên cả 2 hệ điều hành
+    shadowColor: "#5C4A3A",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2, 
   },
   productImageWrapper: {
-    height: 160,
+    height: 170, // Giảm nhẹ xuống 170 để tổng thể card thon gọn chuẩn tỉ lệ 4:3
     width: "100%",
-    backgroundColor: COLORS.PRIMARY_BG,
+    backgroundColor: "#F7F4EE",
     position: "relative",
   },
   productImage: {
     width: "100%",
     height: "100%",
-    resizeMode: "cover",
+  
   },
-  badgeTag: {
+ badgeTag: {
     position: "absolute",
     top: 10,
     left: 10,
-    backgroundColor: COLORS.TEXT_DARK,
+    backgroundColor: "rgba(25, 18, 12, 0.85)",
     paddingVertical: 3,
-    paddingHorizontal: 7,
-    borderRadius: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
   },
-  badgeTagText: {
+ badgeTagText: {
     color: COLORS.WHITE,
-    fontSize: 9,
+    fontSize: 8.5,
+    fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
     fontWeight: "700",
     letterSpacing: 0.8,
+    includeFontPadding: false,
   },
   wishlistButton: {
     position: "absolute",
     top: 10,
     right: 10,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(255, 255, 255, 0.92)",
     justifyContent: "center",
     alignItems: "center",
+    // Shadow riêng cho icon yêu thích trên Android & iOS
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
   },
   productInfo: {
-    padding: 12,
+    padding: 10,
+    justifyContent: "space-between",
   },
-  productCategory: {
-    fontSize: 10,
+ productCategory: {
+    fontSize: 9.5,
+    fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
     color: COLORS.TEXT_MUTED,
     textTransform: "uppercase",
     letterSpacing: 0.8,
-    marginBottom: 2,
+    marginBottom: 3,
+    includeFontPadding: false,
   },
-  productTitle: {
-    fontSize: 13,
-    fontWeight: "600",
+ productTitle: {
+    fontSize: 12.5,
+    fontFamily: Platform.OS === "ios" ? "serif" : "serif",
+    fontWeight: "700",
     color: COLORS.TEXT_DARK,
-    marginBottom: 6,
-    height: 36,
+    lineHeight: 17, // Cố định chiều cao dòng giúp chữ Tiếng Việt hiển thị mượt trên Android
+    minHeight: 34,  // Giữ cố định 2 dòng để các card cạnh nhau luôn bằng chiều cao
+    marginBottom: 4,
+    includeFontPadding: false,
   },
   ratingRow: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 8,
   },
-  ratingText: {
-    fontSize: 11,
+ ratingText: {
+    fontSize: 10.5,
+    fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
     fontWeight: "700",
     color: COLORS.TEXT_DARK,
-    marginLeft: 4,
+    marginLeft: 3,
+    includeFontPadding: false,
   },
-  reviewCount: {
-    fontSize: 11,
+ reviewCount: {
+    fontSize: 10.5,
+    fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
     color: COLORS.TEXT_MUTED,
     marginLeft: 2,
+    includeFontPadding: false,
   },
   priceRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
   },
   priceGroup: {
     flexDirection: "column",
+    flex: 1,
+    marginRight: 4,
   },
-  productPrice: {
-    fontSize: 15,
+ productPrice: {
+    fontSize: 11.5,
+    fontFamily: COLORS.TEXT_DARK,
     fontWeight: "700",
     color: COLORS.ACCENT_WOOD,
+    includeFontPadding: false,
   },
-  originalPrice: {
-    fontSize: 11,
+ originalPrice: {
+    fontSize: 10,
+    fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
     color: COLORS.TEXT_MUTED,
     textDecorationLine: "line-through",
+    includeFontPadding: false,
   },
-  addBagButton: {
+addBagButton: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.ACCENT_WOOD,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    gap: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: 12,
+    gap: 3,
   },
   addBagText: {
     color: COLORS.WHITE,
-    fontSize: 11,
+    fontSize: 10.5,
+    fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
     fontWeight: "600",
+    includeFontPadding: false,
   },
 
   // Empty State
@@ -563,17 +595,18 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
- webFooterContainer: {
+webFooterContainer: {
     backgroundColor: '#181614',
-    width: '100%',             // Tràn rộng hoàn toàn 100% chiều ngang
-    alignSelf: 'stretch',      // Kéo giãn hết khung chứa
+    width: '100%',             
+    maxWidth: '100%',          
     paddingHorizontal: 24,
     paddingTop: 40,
-    paddingBottom: 40,
-    marginTop: 30,
+    paddingBottom: 16,  // Chỉnh padding dưới vừa đủ
+    marginTop: 16,      // Bỏ bớt khoảng cách phía trên nếu muốn
+    marginBottom: 0,    // Đảm bảo không tạo khoảng trống dưới đáy
   },
   footerColMain: {
-    marginBottom: 24,
+    marginBottom: 0,
   },
   footerLogo: {
     fontSize: 22,
