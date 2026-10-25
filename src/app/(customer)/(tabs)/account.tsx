@@ -127,13 +127,13 @@ export default function AccountScreen() {
                   {profile?.fullName || profile?.name || "Nam Anh"}
                 </Text>
                 <Text style={styles.profileEmail}>
-                  {profile?.email || "namanh@furniturehub.com"}
+                 Email: {profile?.email || "namanh@furniturehub.com"}
                 </Text>
                 {profile?.phone && (
-                  <Text style={styles.profilePhone}>{profile.phone}</Text>
+                  <Text style={styles.profilePhone}>Phone: {profile.phone}</Text>
                 )}
                 <View style={styles.vipBadge}>
-                  <Text style={styles.vipBadgeText}>CONCIERGE MEMBER</Text>
+                  <Text style={styles.vipBadgeText}>Thành viên</Text>
                 </View>
               </View>
 
@@ -243,6 +243,7 @@ const styles = StyleSheet.create({
   profileInfo: {
     marginLeft: 14,
     flex: 1,
+    marginBottom: 6,
   },
   profileName: {
     fontSize: 16,

@@ -77,7 +77,7 @@ export default function LoginScreen() {
       setLoading(true);
       const data = await loginApi(email, password);
 
-      // QUAN TRỌNG: Lưu token nhận được từ Backend vào AsyncStorage
+      // Lưu token nhận được từ Backend vào AsyncStorage
       const token = data.token || data.accessToken || data.data?.token;
       if (token) {
         await AsyncStorage.setItem('token', token);
@@ -106,15 +106,30 @@ export default function LoginScreen() {
 
   return (
     <ImageBackground
-      source={{ uri: 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?q=80&w=1000&auto=format&fit=crop' }}
+      source={{ uri: 'https://noithatmanhhe.vn/wp-content/uploads/2024/03/thiet-ke-noi-that-phong-khach-1.jpg' }}
       style={styles.background}
     >
       <View style={styles.overlay}>
-        {/* Component Toast hiển thị thông báo tự biến mất */}
+        {/* Toast thông báo đã được đồng bộ màu sắc với UI FurnitureHub */}
         {toastMessage ? (
-          <Animated.View style={[styles.toastContainer, { opacity: fadeAnim, backgroundColor: toastType === 'success' ? '#2E7D32' : '#C62828' }]}>
-            <Feather name={toastType === 'success' ? "check-circle" : "alert-circle"} size={18} color="#FFF" />
-            <Text style={styles.toastText}>{toastMessage}</Text>
+          <Animated.View 
+            style={[
+              styles.toastContainer, 
+              { 
+                opacity: fadeAnim, 
+                backgroundColor: toastType === 'success' ? '#3D2E1E' : '#7A221E',
+                borderColor: toastType === 'success' ? '#8A6A48' : '#B84A45',
+              }
+            ]}
+          >
+            <Feather 
+              name={toastType === 'success' ? "check-circle" : "alert-circle"} 
+              size={18} 
+              color={toastType === 'success' ? "#E6C594" : "#FFC1BD"} 
+            />
+            <Text style={[styles.toastText, { color: toastType === 'success' ? "#F5EFE6" : "#FFF" }]}>
+              {toastMessage}
+            </Text>
           </Animated.View>
         ) : null}
 
@@ -202,14 +217,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 25,
+    borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 6,
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 8,
     gap: 8,
   },
-  toastText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
+  toastText: { fontSize: 14, fontWeight: '600' },
   container: { flex: 1 },
   scrollContent: { flexGrow: 1, justifyContent: 'flex-end', paddingHorizontal: 20, paddingTop: 40 },
   closeButton: { position: 'absolute', top: 40, left: 20, zIndex: 10, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' },
