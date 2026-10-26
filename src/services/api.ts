@@ -338,6 +338,8 @@ export interface OrderItem {
   date: string;
   status: string; // 'pending' | 'confirmed' | 'packing' | 'in_transit' | 'delivered' | 'cancelled'
   statusLabel?: string;
+  cancelReason?: string;
+  cancellationReason?: string;
   total: number;
   subtotal?: number;
   shipping?: number;
@@ -746,6 +748,8 @@ export const getOrdersApi = async (): Promise<OrderItem[]> => {
         : order.date || "Chưa xác định",
       status: order.status || "pending",
       statusLabel: order.statusLabel || order.status,
+      cancelReason: order.cancelReason || order.cancellationReason || order.reason,
+      cancellationReason: order.cancellationReason || order.cancelReason || order.reason,
       total: order.totalAmount ?? order.total ?? 0,
       subtotal: order.subtotal ?? order.totalAmount ?? 0,
       shipping: order.shippingFee ?? order.shipping ?? 0,
@@ -820,6 +824,8 @@ export const getOrderDetailApi = async (id: string): Promise<OrderItem> => {
         : "Đang cập nhật",
     status: order.status || "pending",
     statusLabel: order.statusLabel || order.status,
+    cancelReason: order.cancelReason || order.cancellationReason || order.reason,
+    cancellationReason: order.cancellationReason || order.cancelReason || order.reason,
     total: order.totalAmount ?? order.total ?? 0,
     subtotal:
       order.subtotal ??
