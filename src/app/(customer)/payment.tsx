@@ -19,7 +19,7 @@ import { useApp } from '@/context/AppContext';
 import { createOrderApi, formatCurrency } from '@/services/api';
 
 const FONTS = {
-  SERIF: Platform.OS === 'ios' ? 'Didot' : 'serif',
+  SERIF: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   SANS: Platform.OS === 'ios' ? 'System' : 'sans-serif',
 };
 
@@ -144,7 +144,7 @@ export default function PaymentScreen() {
         >
           <Feather name="arrow-left" size={18} color="#2A2421" />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif' }]}>
+        <Text style={styles.headerTitle}>
           Phương Thức Thanh Toán
         </Text>
         <View style={{ width: 36 }} />
@@ -155,6 +155,27 @@ export default function PaymentScreen() {
           <Text style={styles.stepBadge}>BƯỚC 2 / 2</Text>
           <Text style={styles.stepSub}>Vui lòng chọn hình thức thanh toán phù hợp nhất với bạn</Text>
         </View>
+
+        {/* Địa chỉ giao hàng đã chọn ở Bước 1 */}
+        {params.fullAddress ? (
+          <View style={styles.addressSummaryCard}>
+            <View style={styles.addressSummaryHeader}>
+              <View style={styles.addressSummaryTitleRow}>
+                <Feather name="map-pin" size={13} color="#8A6A48" />
+                <Text style={styles.addressSummaryTitle}>ĐỊA CHỈ NHẬN HÀNG</Text>
+              </View>
+              <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
+                <Text style={styles.addressChangeText}>Thay đổi</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.addressRecipient}>
+              {params.receiverName || 'Người nhận'} {params.phone ? `• ${params.phone}` : ''}
+            </Text>
+            <Text style={styles.addressFullText} numberOfLines={2}>
+              {params.fullAddress}
+            </Text>
+          </View>
+        ) : null}
 
         {/* 1. Trả Tiền Mặt Khi Nhận Hàng (COD) */}
         <TouchableOpacity
@@ -404,9 +425,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#2A2421',
+    color: '#2b221d',
   },
   scrollContent: {
     padding: 16,
@@ -587,7 +608,6 @@ const styles = StyleSheet.create({
     color: '#8A6A48',
     
     marginBottom: 10,
-    fontFamily: Platform.OS === 'ios' ? 'serif' : 'serif',
   },
   summaryRow: {
     flexDirection: 'row',
@@ -642,6 +662,51 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '700',
     letterSpacing: 0.2,
-    fontFamily: Platform.OS === 'ios' ? 'serif' : 'serif',
+  },
+  addressSummaryCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E8E2D8',
+    marginBottom: 14,
+    elevation: 2,
+    shadowColor: '#5C4A3A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  addressSummaryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  addressSummaryTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  addressSummaryTitle: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#8A6A48',
+    letterSpacing: 1.2,
+  },
+  addressChangeText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#8A6A48',
+  },
+  addressRecipient: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2A2421',
+    marginBottom: 3,
+  },
+  addressFullText: {
+    fontSize: 11.5,
+    color: '#7A7067',
+    lineHeight: 16,
   },
 });

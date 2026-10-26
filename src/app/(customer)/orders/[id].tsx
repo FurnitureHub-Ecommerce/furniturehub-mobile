@@ -8,6 +8,9 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -15,9 +18,16 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { getOrderDetailApi, cancelOrderApi, OrderItem, formatCurrency } from '@/services/api';
 
 const FONTS = {
-  SERIF: Platform.OS === 'ios' ? 'Didot' : 'serif',
+  SERIF: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   SANS: Platform.OS === 'ios' ? 'System' : 'sans-serif',
 };
+
+const CANCEL_REASONS = [
+  'Đổi ý không mua nữa',
+  'Thời gian giao lâu',
+  'Muốn đổi địa chỉ nhận',
+  'Lý do khác',
+];
 
 export default function OrderDetailScreen() {
   const router = useRouter();
@@ -28,6 +38,9 @@ export default function OrderDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [selectedReason, setSelectedReason] = useState<string>('Đổi ý không mua nữa');
+  const [customReason, setCustomReason] = useState<string>('');
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -57,58 +70,107 @@ export default function OrderDetailScreen() {
     order?.status?.toLowerCase() === 'chờ xử lý' ||
     order?.status?.toLowerCase() === 'processing';
 
-  const handleCancelOrder = () => {
-    Alert.alert(
-      'Hủy Đơn Hàng',
-      'Bạn có chắc chắn muốn hủy đơn hàng này không?',
-      [
-        { text: 'Giữ Lại Đơn', style: 'cancel' },
-        {
-          text: 'Xác Nhận Hủy',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setCancelling(true);
-              await cancelOrderApi(order?.id || targetId || '');
-              if (order) {
-                setOrder({
-                  ...order,
-                  status: 'cancelled',
-                  statusLabel: 'Đã Hủy',
-                });
-              }
-              Alert.alert('Thành Công', 'Đơn hàng của bạn đã được hủy.');
-            } catch (err: any) {
-              Alert.alert('Lỗi', err.message || 'Không thể hủy đơn hàng vào lúc này.');
-            } finally {
-              setCancelling(false);
-            }
-          },
-        },
-      ]
-    );
+  const isCancelled =
+    order?.status?.toLowerCase() === 'cancelled' ||
+    order?.status?.toLowerCase() === 'canceled' ||
+    order?.status?.toLowerCase() === 'rejected' ||
+    order?.status?.toLowerCase() === 'đã hủy' ||
+    order?.statusLabel?.toLowerCase() === 'đã hủy';
+
+  const handleConfirmCancel = async () => {
+    let finalReason = selectedReason;
+    if (selectedReason === 'Lý do khác') {
+      if (!customReason.trim()) {
+        Alert.alert('Thông Báo', 'Vui lòng nhập lý do cụ thể khi chọn "Lý do khác".');
+        return;
+      }
+      finalReason = customReason.trim();
+    }
+
+    if (!finalReason) {
+      Alert.alert('Thông Báo', 'Vui lòng chọn lý do hủy đơn hàng.');
+      return;
+    }
+
+    try {
+      setCancelling(true);
+      const targetOrderId = order?.id || targetId || '';
+      await cancelOrderApi(targetOrderId, { reason: finalReason });
+
+      if (order) {
+        setOrder({
+          ...order,
+          status: 'cancelled',
+          statusLabel: 'Đã Hủy',
+          cancelReason: finalReason,
+          cancellationReason: finalReason,
+        });
+      }
+
+      setCancelModalVisible(false);
+      Alert.alert('Thành Công', 'Đơn hàng của bạn đã được hủy.');
+    } catch (err: any) {
+      Alert.alert('Lỗi', err.message || 'Không thể hủy đơn hàng vào lúc này.');
+    } finally {
+      setCancelling(false);
+    }
   };
 
-  const getStatusInfo = (status?: string) => {
-    const s = (status || '').toLowerCase();
-    switch (s) {
-      case 'delivered':
-      case 'đã giao hàng':
-        return { bg: '#E2F0D9', text: '#2E7D32', label: 'Đã Giao Hàng' };
-      case 'in_transit':
-      case 'đang giao hàng':
-      case 'đang vận chuyển':
-        return { bg: '#F5EBE1', text: '#8A6A48', label: 'Đang Vận Chuyển' };
-      case 'pending':
-      case 'chờ xử lý':
-        return { bg: '#FEF5E7', text: '#E67E22', label: 'Chờ Xử Lý' };
-      case 'rejected':
-      case 'cancelled':
-      case 'đã hủy':
-        return { bg: '#FCE8E6', text: '#D93838', label: 'Đã Hủy' };
-      default:
-        return { bg: '#E9E1D5', text: '#8A6A48', label: status || 'Đang xử lý' };
+  const getStatusInfo = (status?: string, statusLabel?: string) => {
+    const s = (status || '').toLowerCase().trim();
+    const l = (statusLabel || '').toLowerCase().trim();
+
+    if (
+      s === 'delivered' ||
+      s === 'completed' ||
+      s.includes('giao hàng') ||
+      s === 'đã giao' ||
+      l === 'đã giao hàng' ||
+      l === 'đã giao'
+    ) {
+      return { bg: '#E2F0D9', text: '#2E7D32', label: 'Đã Giao Hàng' };
     }
+    if (
+      s === 'shipping' ||
+      s === 'in_transit' ||
+      s.includes('vận chuyển') ||
+      s.includes('đang giao') ||
+      l.includes('vận chuyển') ||
+      l.includes('đang giao')
+    ) {
+      return { bg: '#F5EBE1', text: '#8A6A48', label: 'Đang Vận Chuyển' };
+    }
+    if (s === 'confirmed' || s === 'đã xác nhận' || l === 'đã xác nhận') {
+      return { bg: '#E6F4EA', text: '#137333', label: 'Đã Xác Nhận' };
+    }
+    if (
+      s === 'packing' ||
+      s === 'processing' ||
+      s === 'đang xử lý' ||
+      s === 'đang đóng gói' ||
+      l.includes('xử lý') ||
+      l.includes('đóng gói')
+    ) {
+      return { bg: '#E8F0FE', text: '#1A73E8', label: 'Đang Xử Lý' };
+    }
+    if (s === 'pending' || s === 'chờ xử lý' || l === 'chờ xử lý') {
+      return { bg: '#FEF5E7', text: '#E67E22', label: 'Chờ Xử Lý' };
+    }
+    if (
+      s === 'rejected' ||
+      s === 'cancelled' ||
+      s === 'canceled' ||
+      s.includes('hủy') ||
+      l.includes('hủy')
+    ) {
+      return { bg: '#FCE8E6', text: '#D93838', label: 'Đã Hủy' };
+    }
+
+    if (statusLabel && !/^[a-zA-Z_-]+$/.test(statusLabel)) {
+      return { bg: '#E9E1D5', text: '#8A6A48', label: statusLabel };
+    }
+
+    return { bg: '#FEF5E7', text: '#E67E22', label: 'Đang Xử Lý' };
   };
 
   if (loading) {
@@ -132,7 +194,7 @@ export default function OrderDetailScreen() {
     );
   }
 
-  const statusInfo = getStatusInfo(order.status);
+  const statusInfo = getStatusInfo(order.status, order.statusLabel);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -145,7 +207,7 @@ export default function OrderDetailScreen() {
         >
           <Feather name="arrow-left" size={18} color="#252525" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>
+        <Text style={[styles.headerTitle, styles.headerTitleStyle]}>
           Chi Tiết Đơn #{order.id ? order.id.slice(-8).toUpperCase() : ''}
         </Text>
         <TouchableOpacity
@@ -177,6 +239,12 @@ export default function OrderDetailScreen() {
             </Text>
           </View>
           <Text style={styles.orderDate}>Ngày đặt đơn: {order.date}</Text>
+
+          {isCancelled && (
+            <Text style={styles.cancelReasonText}>
+              Lý do: {order.cancelReason || order.cancellationReason || 'Người mua yêu cầu hủy'}
+            </Text>
+          )}
 
           {order.status !== 'cancelled' && order.status !== 'rejected' && (
             <TouchableOpacity
@@ -272,22 +340,131 @@ export default function OrderDetailScreen() {
         {/* Nút hủy đơn hàng */}
         {isPending && (
           <TouchableOpacity
-            onPress={handleCancelOrder}
-            disabled={cancelling}
-            style={[styles.cancelBtn, cancelling && { opacity: 0.6 }]}
+            onPress={() => {
+              setSelectedReason('Đổi ý không mua nữa');
+              setCustomReason('');
+              setCancelModalVisible(true);
+            }}
+            style={styles.cancelBtn}
             activeOpacity={0.85}
           >
-            {cancelling ? (
-              <ActivityIndicator color="#D93838" />
-            ) : (
-              <>
-                <Feather name="x-circle" size={15} color="#D93838" />
-                <Text style={styles.cancelBtnText}>HỦY ĐƠN HÀNG NÀY</Text>
-              </>
-            )}
+            <Feather name="x-circle" size={15} color="#D93838" />
+            <Text style={styles.cancelBtnText}>HỦY ĐƠN HÀNG NÀY</Text>
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* Modal Chọn Lý Do Hủy Đơn */}
+      <Modal
+        visible={cancelModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          if (!cancelling) setCancelModalVisible(false);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.keyboardAvoid}
+          >
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Lý Do Hủy Đơn Hàng</Text>
+                <TouchableOpacity
+                  onPress={() => setCancelModalVisible(false)}
+                  disabled={cancelling}
+                  style={styles.modalCloseBtn}
+                  activeOpacity={0.7}
+                >
+                  <Feather name="x" size={18} color="#2A2421" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalSubtitle}>
+                Vui lòng chọn lý do hủy đơn hàng của bạn:
+              </Text>
+
+              {/* Danh sách radio buttons */}
+              <View style={styles.reasonList}>
+                {CANCEL_REASONS.map((reason) => {
+                  const isSelected = selectedReason === reason;
+                  return (
+                    <TouchableOpacity
+                      key={reason}
+                      style={[
+                        styles.radioOption,
+                        isSelected && styles.radioOptionActive,
+                      ]}
+                      onPress={() => setSelectedReason(reason)}
+                      activeOpacity={0.75}
+                    >
+                      <View
+                        style={[
+                          styles.radioOuter,
+                          isSelected && styles.radioOuterActive,
+                        ]}
+                      >
+                        {isSelected && <View style={styles.radioInner} />}
+                      </View>
+                      <Text
+                        style={[
+                          styles.radioLabel,
+                          isSelected && styles.radioLabelActive,
+                        ]}
+                      >
+                        {reason}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Ô TextInput khi chọn 'Lý do khác' */}
+              {selectedReason === 'Lý do khác' && (
+                <TextInput
+                  style={styles.customReasonInput}
+                  placeholder="Nhập lý do cụ thể của bạn..."
+                  placeholderTextColor="#9A9086"
+                  value={customReason}
+                  onChangeText={setCustomReason}
+                  multiline={true}
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+              )}
+
+              {/* Modal footer / Actions */}
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={styles.modalBackBtn}
+                  onPress={() => setCancelModalVisible(false)}
+                  disabled={cancelling}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.modalBackBtnText}>Đóng</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.modalConfirmBtn,
+                    cancelling && { opacity: 0.7 },
+                  ]}
+                  onPress={handleConfirmCancel}
+                  disabled={cancelling}
+                  activeOpacity={0.85}
+                >
+                  {cancelling ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.modalConfirmBtnText}>Xác nhận hủy</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -350,10 +527,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#2A2421',
-    fontFamily: Platform.OS === 'ios' ? 'Palatino' : 'serif',
+    color: '#2b221d',
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
+  },
+  headerTitleStyle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2b221d',
+    fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
   scrollContent: {
@@ -638,6 +822,157 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#D93838',
     letterSpacing: 1,
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
+  },
+  cancelReasonText: {
+    fontSize: 11.5,
+    color: '#D93838',
+    marginTop: -2,
+    marginBottom: 6,
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  keyboardAvoid: {
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#E8E2D8',
+    elevation: 5,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#2A2421',
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  modalSubtitle: {
+    fontSize: 12.5,
+    color: '#7A7067',
+    marginBottom: 14,
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
+  },
+  reasonList: {
+    marginBottom: 10,
+  },
+  radioOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    marginBottom: 4,
+  },
+  radioOptionActive: {
+    backgroundColor: '#FAF7F2',
+  },
+  radioOuter: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#B8AEA2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  radioOuterActive: {
+    borderColor: '#8A6A48',
+  },
+  radioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#8A6A48',
+  },
+  radioLabel: {
+    flex: 1,
+    fontSize: 13,
+    color: '#2A2421',
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
+  },
+  radioLabelActive: {
+    fontWeight: '600',
+    color: '#8A6A48',
+  },
+  customReasonInput: {
+    minHeight: 78,
+    borderWidth: 1,
+    borderColor: '#E8E2D8',
+    borderRadius: 10,
+    backgroundColor: '#FAF7F2',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: '#2A2421',
+    textAlignVertical: 'top',
+    marginBottom: 14,
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 8,
+  },
+  modalBackBtn: {
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    borderRadius: 10,
+    backgroundColor: '#EAE2D5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBackBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2A2421',
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
+  },
+  modalConfirmBtn: {
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    backgroundColor: '#D93838',
+    minWidth: 125,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalConfirmBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },

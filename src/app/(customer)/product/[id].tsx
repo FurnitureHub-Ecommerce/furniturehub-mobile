@@ -926,7 +926,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     color: "#8A6A48",
-    fontFamily: Platform.OS === 'ios' ? 'serif' : 'serif',
     marginTop: 5,
   },
   selectedVariantNote: {

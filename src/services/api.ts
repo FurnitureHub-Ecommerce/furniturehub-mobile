@@ -272,10 +272,34 @@ export const setDefaultAddressApi = async (
 export const getProductsApi = async () => {
   try {
     const res = await apiRequest("/api/products");
-    return Array.isArray(res) ? res : res?.data || res?.products || [];
+    const rawList = Array.isArray(res) ? res : res?.data || res?.products || [];
+    return rawList.map((item: any) => {
+      const name = item.name || item.title || "Sản phẩm LUMORA";
+      const image =
+        item.images?.[0] ||
+        item.image ||
+        item.thumbnail ||
+        "https://via.placeholder.com/150";
+      const price = Number(item.price || item.originalPrice || item.minPrice || 0);
+      const rating = item.rating || item.averageRating || 5.0;
+      return {
+        ...item,
+        _id: item._id || item.id,
+        id: item._id || item.id,
+        name,
+        title: name,
+        image,
+        thumbnail: image,
+        images: Array.isArray(item.images) && item.images.length > 0 ? item.images : [image],
+        price: Number.isFinite(price) ? price : 0,
+        originalPrice: Number(item.originalPrice || item.maxPrice || price || 0),
+        rating,
+        averageRating: rating,
+      };
+    });
   } catch (err) {
     console.warn("Lỗi tải danh sách sản phẩm từ Server:", err);
-    return []; // Trả về mảng rỗng để không bao giờ bị trộn data giả
+    return [];
   }
 };
 
@@ -314,6 +338,8 @@ export interface OrderItem {
   date: string;
   status: string; // 'pending' | 'confirmed' | 'packing' | 'in_transit' | 'delivered' | 'cancelled'
   statusLabel?: string;
+  cancelReason?: string;
+  cancellationReason?: string;
   total: number;
   subtotal?: number;
   shipping?: number;
@@ -706,6 +732,40 @@ export const deleteVariantApi = async (
   });
 };
 
+export const formatOrderStatusVietnamese = (status?: string, rawLabel?: string): string => {
+  const s = (status || "").toLowerCase().trim();
+  const l = (rawLabel || "").toLowerCase().trim();
+
+  if (s === "delivered" || s === "completed" || s.includes("giao hàng") || s === "đã giao" || l === "đã giao hàng" || l === "đã giao") {
+    return "Đã Giao";
+  }
+  if (s === "shipping" || s === "in_transit" || s.includes("vận chuyển") || s.includes("đang giao") || l.includes("vận chuyển") || l.includes("đang giao")) {
+    return "Đang Vận Chuyển";
+  }
+  if (s === "confirmed" || s === "đã xác nhận" || l === "đã xác nhận") {
+    return "Đã Xác Nhận";
+  }
+  if (s === "packing" || s === "processing" || s === "đang xử lý" || s === "đang đóng gói") {
+    return "Đang Xử Lý";
+  }
+  if (s === "pending" || s === "chờ xử lý" || l === "chờ xử lý") {
+    return "Chờ Xử Lý";
+  }
+  if (
+    s === "rejected" ||
+    s === "cancelled" ||
+    s === "canceled" ||
+    s.includes("hủy") ||
+    l.includes("hủy")
+  ) {
+    return "Đã Hủy";
+  }
+  if (rawLabel && !/^[a-zA-Z_-]+$/.test(rawLabel)) {
+    return rawLabel;
+  }
+  return "Đang Xử Lý";
+};
+
 //=================== ORDER APIs ====================
 // Lấy danh sách đơn hàng thực tế của Customer
 export const getOrdersApi = async (): Promise<OrderItem[]> => {
@@ -721,7 +781,9 @@ export const getOrdersApi = async (): Promise<OrderItem[]> => {
         ? new Date(order.createdAt).toLocaleDateString("vi-VN")
         : order.date || "Chưa xác định",
       status: order.status || "pending",
-      statusLabel: order.statusLabel || order.status,
+      statusLabel: formatOrderStatusVietnamese(order.status, order.statusLabel),
+      cancelReason: order.cancelReason || order.cancellationReason || order.reason,
+      cancellationReason: order.cancellationReason || order.cancelReason || order.reason,
       total: order.totalAmount ?? order.total ?? 0,
       subtotal: order.subtotal ?? order.totalAmount ?? 0,
       shipping: order.shippingFee ?? order.shipping ?? 0,
@@ -795,7 +857,9 @@ export const getOrderDetailApi = async (id: string): Promise<OrderItem> => {
         ? new Date(order.updatedAt).toLocaleDateString("vi-VN")
         : "Đang cập nhật",
     status: order.status || "pending",
-    statusLabel: order.statusLabel || order.status,
+    statusLabel: formatOrderStatusVietnamese(order.status, order.statusLabel),
+    cancelReason: order.cancelReason || order.cancellationReason || order.reason,
+    cancellationReason: order.cancellationReason || order.cancelReason || order.reason,
     total: order.totalAmount ?? order.total ?? 0,
     subtotal:
       order.subtotal ??
@@ -847,17 +911,28 @@ export const createOrderApi = async (orderPayload: { addressId: string }) => {
     body: JSON.stringify(orderPayload),
   });
 };
-export const cancelOrderApi = async (id: string, reason?: string) => {
+export const cancelOrderApi = async (
+  id: string,
+  payloadOrReason?: string | { reason?: string },
+) => {
+  const reasonText =
+    typeof payloadOrReason === "string"
+      ? payloadOrReason
+      : payloadOrReason?.reason || "Khách hàng yêu cầu hủy đơn";
+
   try {
     return await apiRequest(`/api/orders/${id}/cancel`, {
       method: "PATCH",
-      body: JSON.stringify({ reason: reason || "Khách hàng yêu cầu hủy đơn" }),
+      body: JSON.stringify({ reason: reasonText }),
     });
   } catch (err) {
     console.warn(`Mô phỏng hủy đơn hàng ${id} thành công (fallback):`, err);
     return { success: true, message: "Đã hủy đơn hàng thành công" };
   }
 };
+
+// Alias hỗ trợ gọi trực tiếp cancelOrder(orderId, { reason: cancelReason })
+export const cancelOrder = cancelOrderApi;
 
 export const getOrderTrackingApi = async (id: string) => {
   try {

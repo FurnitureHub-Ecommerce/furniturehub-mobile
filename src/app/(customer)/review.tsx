@@ -230,8 +230,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#252525',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    color: '#2b221d',
   },
   scrollContent: {
     padding: 20,
