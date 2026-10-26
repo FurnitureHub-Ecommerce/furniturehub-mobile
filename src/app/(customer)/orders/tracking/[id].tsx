@@ -23,7 +23,7 @@ import {
 } from "@/services/api";
 
 const FONTS = {
-  SERIF: Platform.OS === "ios" ? "Didot" : "serif",
+  SERIF: Platform.OS === "ios" ? "System" : "sans-serif",
   SANS: Platform.OS === "ios" ? "System" : "sans-serif",
 };
 
@@ -487,7 +487,7 @@ export default function OrderTrackingScreen() {
         >
           <Feather name="arrow-left" size={18} color="#252525" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Theo Dõi Đơn Hàng</Text>
+        <Text style={[styles.headerTitle, styles.headerTitleStyle]}>Theo Dõi Đơn Hàng</Text>
         <TouchableOpacity
           onPress={() => router.push(`/(customer)/orders/${id}` as any)}
           style={styles.iconButton}
@@ -721,10 +721,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
-    color: "#2A2421",
-    fontFamily: Platform.OS === "ios" ? "Palatino" : "serif",
+    color: "#2b221d",
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
+  },
+  headerTitleStyle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#2b221d",
+    fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
   loadingContainer: {
@@ -767,7 +774,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#cc6e0a",
     marginBottom: 3,
-    fontFamily: Platform.OS === "ios" ? "serif" : "serif",
+    fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
   carrierName: {
@@ -841,7 +848,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#ce6b00",
     marginBottom: 10,
-    fontFamily: Platform.OS === "ios" ? "serif" : "serif",
+    fontFamily: FONTS.SANS,
     includeFontPadding: false,
     marginLeft: 6,
   },

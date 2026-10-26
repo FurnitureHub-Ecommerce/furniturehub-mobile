@@ -18,7 +18,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { getOrderDetailApi, cancelOrderApi, OrderItem, formatCurrency } from '@/services/api';
 
 const FONTS = {
-  SERIF: Platform.OS === 'ios' ? 'Didot' : 'serif',
+  SERIF: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   SANS: Platform.OS === 'ios' ? 'System' : 'sans-serif',
 };
 

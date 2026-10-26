@@ -24,7 +24,7 @@ import {
 } from '@/services/api';
 
 const FONTS = {
-  SERIF: Platform.OS === 'ios' ? 'Didot' : 'serif',
+  SERIF: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   SANS: Platform.OS === 'ios' ? 'System' : 'sans-serif',
 };
 
@@ -175,7 +175,7 @@ export default function WishlistScreen() {
           <Feather name="arrow-left" size={18} color="#2A2421" />
         </TouchableOpacity>
 
-        <Text style={[styles.headerTitle, { fontFamily: FONTS.SERIF }]}>
+        <Text style={styles.headerTitle}>
           Sản Phẩm Yêu Thích ({wishlistProducts.length})
         </Text>
 
@@ -196,7 +196,7 @@ export default function WishlistScreen() {
       ) : wishlistProducts.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="heart-outline" size={56} color="#C2B8A3" />
-          <Text style={[styles.emptyTitle, { fontFamily: FONTS.SERIF }]}>Chưa có sản phẩm yêu thích</Text>
+          <Text style={styles.emptyTitle}>Chưa có sản phẩm yêu thích</Text>
           <Text style={styles.emptySub}>
             Nhấn vào biểu tượng trái tim ở bất kỳ sản phẩm nào để lưu lại danh sách này.
           </Text>
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#2A2421' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#2b221d' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   emptyTitle: { fontSize: 18, color: '#2A2421', marginTop: 16, marginBottom: 8 },
   emptySub: { fontSize: 12.5, color: '#7A7067', textAlign: 'center', lineHeight: 18, marginBottom: 24 },

@@ -19,7 +19,7 @@ import { useApp } from '@/context/AppContext';
 import { createOrderApi, formatCurrency } from '@/services/api';
 
 const FONTS = {
-  SERIF: Platform.OS === 'ios' ? 'Didot' : 'serif',
+  SERIF: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   SANS: Platform.OS === 'ios' ? 'System' : 'sans-serif',
 };
 
@@ -144,7 +144,7 @@ export default function PaymentScreen() {
         >
           <Feather name="arrow-left" size={18} color="#2A2421" />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif' }]}>
+        <Text style={styles.headerTitle}>
           Phương Thức Thanh Toán
         </Text>
         <View style={{ width: 36 }} />
@@ -404,9 +404,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#2A2421',
+    color: '#2b221d',
   },
   scrollContent: {
     padding: 16,
@@ -587,7 +587,6 @@ const styles = StyleSheet.create({
     color: '#8A6A48',
     
     marginBottom: 10,
-    fontFamily: Platform.OS === 'ios' ? 'serif' : 'serif',
   },
   summaryRow: {
     flexDirection: 'row',
@@ -642,6 +641,5 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '700',
     letterSpacing: 0.2,
-    fontFamily: Platform.OS === 'ios' ? 'serif' : 'serif',
   },
 });

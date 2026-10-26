@@ -15,8 +15,8 @@ import { Feather } from '@expo/vector-icons';
 import { getOrdersApi, OrderItem, formatCurrency } from '@/services/api';
 
 const FONTS = {
-  SERIF: Platform.OS === 'ios' ? 'serif' : 'serif',
-  SANS: Platform.OS === 'ios' ? 'sans-serif' : 'sans-serif',
+  SERIF: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+  SANS: Platform.OS === 'ios' ? 'System' : 'sans-serif',
 };
 
 const ORDER_TABS = [
@@ -116,7 +116,7 @@ export default function OrderHistoryScreen() {
         >
           <Feather name="arrow-left" size={18} color="#252525" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Lịch Sử Đơn Hàng</Text>
+        <Text style={[styles.headerTitle, styles.headerTitleStyle]}>Lịch Sử Đơn Hàng</Text>
         <TouchableOpacity
           onPress={onRefresh}
           style={styles.iconButton}
@@ -291,8 +291,15 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#2A2421',
-    fontFamily: FONTS.SERIF,
+    color: '#2b221d',
+    fontFamily: FONTS.SANS,
+    includeFontPadding: false,
+  },
+  headerTitleStyle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2b221d',
+    fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
   tabBar: {
@@ -350,7 +357,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#2A2421',
-    fontFamily: FONTS.SERIF,
+    fontFamily: FONTS.SANS,
     marginTop: 16,
     marginBottom: 8,
     includeFontPadding: false,

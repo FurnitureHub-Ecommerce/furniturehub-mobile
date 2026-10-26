@@ -215,7 +215,7 @@ export default function CartScreen() {
           <Feather name="arrow-left" size={20} color="#252525" />
         </TouchableOpacity>
 
-        <Text style={[styles.headerTitle, { fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif', fontSize: 19 }]}>Giỏ Hàng Của Tôi</Text>
+        <Text style={styles.headerTitle}>Giỏ Hàng Của Tôi</Text>
 
         <TouchableOpacity onPress={handleRefresh} style={styles.headerBtn} activeOpacity={0.7}>
           {isRefreshing ? (
@@ -395,7 +395,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#252525' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#2b221d' },
   scrollContent: { padding: 16, paddingBottom: 100 },
   selectAllRow: {
     flexDirection: 'row',

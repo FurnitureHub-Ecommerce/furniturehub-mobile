@@ -172,7 +172,7 @@ export default function CheckoutScreen() {
         >
           <Feather name="arrow-left" size={18} color="#2A2421" />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif' }]}>
+        <Text style={styles.headerTitle}>
           Địa Chỉ Giao Hàng
         </Text>
         <TouchableOpacity onPress={fetchCheckoutData} style={styles.iconButton} activeOpacity={0.7}>
@@ -384,9 +384,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#2A2421',
+    color: '#2b221d',
   },
   scrollContent: {
     padding: 16,
