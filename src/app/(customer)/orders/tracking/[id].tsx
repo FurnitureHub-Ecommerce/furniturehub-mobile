@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   StyleSheet,
   Text,
@@ -38,14 +38,14 @@ const CANCEL_REASONS = [
 
 interface CancelOrderModalProps {
   visible: boolean;
-  isSubmitting: boolean;
+  canceling: boolean;
   onClose: () => void;
   onConfirm: (reason: string) => void;
 }
 
 const CancelOrderModal: React.FC<CancelOrderModalProps> = ({
   visible,
-  isSubmitting,
+  canceling,
   onClose,
   onConfirm,
 }) => {
@@ -61,7 +61,7 @@ const CancelOrderModal: React.FC<CancelOrderModalProps> = ({
 
   const cancelReason =
     selectedReason === "Khác" ? customReason.trim() : selectedReason.trim();
-  const isConfirmDisabled = !cancelReason || isSubmitting;
+  const isConfirmDisabled = !cancelReason || canceling;
 
   const handleConfirmPress = () => {
     if (isConfirmDisabled) return;
@@ -81,7 +81,7 @@ const CancelOrderModal: React.FC<CancelOrderModalProps> = ({
             <Text style={styles.modalTitle}>Lý Do Hủy Đơn Hàng</Text>
             <TouchableOpacity
               onPress={onClose}
-              disabled={isSubmitting}
+              disabled={canceling}
               style={styles.modalCloseIcon}
             >
               <Feather name="x" size={18} color="#2A2421" />
@@ -142,7 +142,7 @@ const CancelOrderModal: React.FC<CancelOrderModalProps> = ({
             <TouchableOpacity
               style={styles.modalBackBtn}
               onPress={onClose}
-              disabled={isSubmitting}
+              disabled={canceling}
               activeOpacity={0.8}
             >
               <Text style={styles.modalBackBtnText}>Đóng</Text>
@@ -157,7 +157,7 @@ const CancelOrderModal: React.FC<CancelOrderModalProps> = ({
               disabled={isConfirmDisabled}
               activeOpacity={0.85}
             >
-              {isSubmitting ? (
+              {canceling ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <Text style={styles.modalConfirmBtnText}>Xác nhận hủy</Text>
@@ -170,7 +170,7 @@ const CancelOrderModal: React.FC<CancelOrderModalProps> = ({
   );
 };
 
-// Hàm hủy đơn theo đúng yêu cầu: await cancelOrder(orderId, { reason: cancelReason })
+// Hàm hủy đơn theo đúng yêu cầu: await cancelOrder(order._id || order.id, { reason: reason.trim() })
 const cancelOrder = async (
   orderId: string,
   payload: { reason: string },
@@ -187,49 +187,116 @@ export default function OrderTrackingScreen() {
   const [userProfile, setUserProfile] = useState<any>(null);
 
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
-  const [isCancelling, setIsCancelling] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [cancelReasonText, setCancelReasonText] = useState<string>("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    const loadTrackingData = async () => {
-      try {
-        setLoading(true);
-        const orderId = id || "";
-        if (!orderId) return;
+  const fetchOrderDetail = useCallback(async () => {
+    try {
+      setLoading(true);
+      const orderId = id || "";
+      if (!orderId) return;
 
-        const [orderRes, trackingRes, profileRes] = await Promise.allSettled([
-          getOrderDetailApi(orderId),
-          getOrderTrackingApi(orderId),
-          getUserProfileApi(),
-        ]);
+      const [orderRes, trackingRes, profileRes] = await Promise.allSettled([
+        getOrderDetailApi(orderId),
+        getOrderTrackingApi(orderId),
+        getUserProfileApi(),
+      ]);
 
-        if (orderRes.status === "fulfilled") {
-          setOrder(orderRes.value);
-        }
-        if (trackingRes.status === "fulfilled") {
-          setTrackingData(trackingRes.value);
-        }
-        if (profileRes.status === "fulfilled") {
-          setUserProfile(
-            profileRes.value?.user ||
-              profileRes.value?.data ||
-              profileRes.value,
-          );
-        }
-      } catch (error) {
-        console.warn("Lỗi tải thông tin vận chuyển:", error);
-      } finally {
-        setLoading(false);
+      if (orderRes.status === "fulfilled") {
+        setOrder(orderRes.value);
       }
-    };
-
-    loadTrackingData();
+      if (trackingRes.status === "fulfilled") {
+        setTrackingData(trackingRes.value);
+      }
+      if (profileRes.status === "fulfilled") {
+        setUserProfile(
+          profileRes.value?.user ||
+            profileRes.value?.data ||
+            profileRes.value,
+        );
+      }
+    } catch (error) {
+      console.warn("Lỗi tải thông tin vận chuyển:", error);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    fetchOrderDetail();
+  }, [fetchOrderDetail]);
+
+  // Chỉ gọi API khi nhấn nút 'Xác nhận hủy' BÊN TRONG Modal
+  const handleConfirmCancelWithReason = async (reason: string) => {
+    if (!reason || reason.trim() === "") {
+      Alert.alert("Lỗi", "Vui lòng chọn hoặc nhập lý do hủy đơn hàng");
+      return;
+    }
+    try {
+      setCanceling(true);
+      const targetOrderId = String(
+        (order as any)?._id || order?.id || id || "",
+      );
+
+      // Gọi API hủy đơn và truyền kèm lý do vào body:
+      await cancelOrder(targetOrderId, { reason: reason.trim() });
+
+      setCancelModalVisible(false);
+      setCancelReasonText(reason.trim());
+
+      const nowIso = new Date().toISOString();
+      setTrackingData((prev: any) => ({
+        ...(prev || {}),
+        status: "CANCELLED",
+        updatedAt: nowIso,
+        cancelReason: reason.trim(),
+      }));
+      setOrder((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "CANCELLED",
+              statusLabel: "Đã Hủy",
+            }
+          : prev,
+      );
+
+      setToastMessage("Đã hủy đơn hàng thành công");
+      setTimeout(() => setToastMessage(null), 3000);
+      Alert.alert("Thành công", "Đơn hàng đã được hủy");
+
+      // Refresh lại dữ liệu đơn hàng
+      await fetchOrderDetail();
+    } catch (error: any) {
+      Alert.alert(
+        "Lỗi",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Không thể hủy đơn hàng",
+      );
+    } finally {
+      setCanceling(false);
+    }
+  };
+
+  const checkIsCancelled = (statusVal?: string) => {
+    const s = (statusVal || "").toLowerCase().trim();
+    return (
+      s === "cancelled" ||
+      s === "canceled" ||
+      s === "rejected" ||
+      s === "đã hủy" ||
+      s === "da huy" ||
+      s.includes("hủy") ||
+      s.includes("cancel")
+    );
+  };
 
   // Việt hóa trạng thái hệ thống
   const formatStatusLabel = (rawStatus?: string) => {
     const s = (rawStatus || "").toLowerCase().trim();
+    if (checkIsCancelled(s)) return "Đã Hủy";
     if (s === "delivered" || s === "đã giao hàng") return "Đã giao hàng";
     if (
       s === "shipping" ||
@@ -240,8 +307,6 @@ export default function OrderTrackingScreen() {
       return "Đang vận chuyển";
     if (s === "confirmed" || s === "đã xác nhận" || s === "packing")
       return "Đã xác nhận";
-    if (s === "cancelled" || s === "rejected" || s === "đã hủy")
-      return "ĐÃ HỦY";
     return "Chờ xử lý";
   };
 
@@ -257,52 +322,11 @@ export default function OrderTrackingScreen() {
     });
   };
 
-  // Xử lý khi bấm 'Xác nhận hủy' trong CancelOrderModal
-  const handleConfirmCancelOrder = async (cancelReason: string) => {
-    const orderId = String(id || order?.id || "");
-    if (!orderId) return;
-
-    try {
-      setIsCancelling(true);
-
-      // Gọi API hủy đơn kèm body payload lý do
-      await cancelOrder(orderId, { reason: cancelReason });
-
-      const nowIso = new Date().toISOString();
-
-      // Cập nhật ngay trạng thái đơn hàng sang 'ĐÃ HỦY' trên giao diện & Timeline
-      setCancelReasonText(cancelReason);
-      setTrackingData((prev: any) => ({
-        ...(prev || {}),
-        status: "cancelled",
-        updatedAt: nowIso,
-        cancelReason,
-      }));
-      setOrder((prev) =>
-        prev
-          ? {
-              ...prev,
-              status: "cancelled",
-              statusLabel: "ĐÃ HỦY",
-            }
-          : prev,
-      );
-
-      setCancelModalVisible(false);
-
-      // Hiển thị Toast & Alert thông báo hủy thành công
-      setToastMessage("Đã hủy đơn hàng thành công");
-      setTimeout(() => setToastMessage(null), 3000);
-      Alert.alert("Thành công", "Đơn hàng của bạn đã được hủy thành công.");
-    } catch (error: any) {
-      Alert.alert(
-        "Lỗi",
-        error?.message || "Không thể hủy đơn hàng lúc này. Vui lòng thử lại.",
-      );
-    } finally {
-      setIsCancelling(false);
-    }
-  };
+  // Kiểm tra trạng thái đơn hàng đã hủy hay chưa
+  const isOrderCancelled =
+    checkIsCancelled(trackingData?.status) ||
+    checkIsCancelled(order?.status) ||
+    checkIsCancelled(order?.statusLabel);
 
   // Tạo Timeline 4 bước chuẩn
   const buildTimeline = () => {
@@ -314,12 +338,7 @@ export default function OrderTrackingScreen() {
       formatDateTime(trackingData?.createdAt || order?.date) || "Đã tiếp nhận";
     const updatedTime = formatDateTime(trackingData?.updatedAt) || "Mới đây";
 
-    const isCancelled =
-      rawStatus === "cancelled" ||
-      rawStatus === "rejected" ||
-      rawStatus === "đã hủy";
-
-    if (isCancelled) {
+    if (isOrderCancelled) {
       const reasonToDisplay =
         cancelReasonText ||
         trackingData?.cancelReason ||
@@ -407,6 +426,9 @@ export default function OrderTrackingScreen() {
   const timelineSteps = buildTimeline();
 
   const getStatusBadgeInfo = () => {
+    if (isOrderCancelled) {
+      return { label: "ĐÃ HỦY", bg: "#FCE8E6", text: "#D93838" };
+    }
     const s = (trackingData?.status || order?.status || "")
       .toLowerCase()
       .trim();
@@ -421,21 +443,12 @@ export default function OrderTrackingScreen() {
       return { label: "ĐANG VẬN CHUYỂN", bg: "#F5EBE1", text: "#8A6A48" };
     if (s === "confirmed" || s === "đã xác nhận" || s === "packing")
       return { label: "ĐÃ XÁC NHẬN", bg: "#EBF3FA", text: "#2980B9" };
-    if (s === "cancelled" || s === "rejected" || s === "đã hủy")
-      return { label: "ĐÃ HỦY", bg: "#FCE8E6", text: "#D93838" };
     return { label: "CHỜ XỬ LÝ", bg: "#FEF5E7", text: "#E67E22" };
   };
 
   const statusBadge = getStatusBadgeInfo();
   const rawSystemStatus = trackingData?.status || order?.status;
   const normalizedStatus = (rawSystemStatus || "").toLowerCase().trim();
-
-  // Kiểm tra trạng thái đã hủy hoặc đã giao để ẩn nút Hủy đơn hàng
-  const isOrderCancelled =
-    normalizedStatus === "cancelled" ||
-    normalizedStatus === "rejected" ||
-    normalizedStatus === "đã hủy" ||
-    statusBadge.label === "ĐÃ HỦY";
 
   const isOrderDelivered =
     normalizedStatus === "delivered" || normalizedStatus === "đã giao hàng";
@@ -649,7 +662,9 @@ export default function OrderTrackingScreen() {
             </View>
           </View>
 
-          {/* Nút Hủy đơn hàng: Tự động ẩn khi đơn đã hủy hoặc đã giao */}
+          {/* Nút 'Hủy đơn hàng':
+              - Ẩn hoàn toàn nếu trạng thái đã là 'Đã Hủy' hoặc 'CANCELLED'
+              - CHỈ mở Modal: setCancelModalVisible(true) */}
           {!isOrderCancelled && !isOrderDelivered && (
             <TouchableOpacity
               style={styles.cancelOrderBtn}
@@ -666,9 +681,9 @@ export default function OrderTrackingScreen() {
       {/* Modal chọn hoặc nhập lý do hủy đơn */}
       <CancelOrderModal
         visible={cancelModalVisible}
-        isSubmitting={isCancelling}
+        canceling={canceling}
         onClose={() => setCancelModalVisible(false)}
-        onConfirm={handleConfirmCancelOrder}
+        onConfirm={handleConfirmCancelWithReason}
       />
 
       {/* Toast thông báo hủy thành công */}
