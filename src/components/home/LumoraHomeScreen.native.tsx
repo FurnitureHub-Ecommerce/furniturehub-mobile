@@ -193,20 +193,21 @@ export default function LumoraHomeScreen() {
         : prodData.data || prodData.products || [];
 
       // Giữ nguyên object gốc (bao gồm variantStocks từ Backend)
+            // Giữ nguyên object gốc (bao gồm variantStocks từ Backend)
       const formattedProducts = rawProducts.map((item: any) => {
         const realId = String(item._id || item.id);
         const firstImage =
-          item.images && Array.isArray(item.images) && item.images.length > 0
-            ? item.images[0]
-            : item.image ||
-              "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?q=80&w=600";
-        
+          item.images?.[0] ||
+          item.image ||
+          item.thumbnail ||
+          "https://via.placeholder.com/150";
+
         return {
           ...item,
           _id: realId,
           id: realId,
-          title: item.name || item.title || "Sản phẩm nội thất",
-          price: item.minPrice ?? item.price ?? 0,
+          title: item.name || item.title || "Sản phẩm LUMORA",
+          price: Number(item.price || item.originalPrice || item.minPrice || 0),
           originalPrice: item.originalPrice || item.maxPrice,
           image: firstImage,
           category:
@@ -216,14 +217,13 @@ export default function LumoraHomeScreen() {
             "Nội Thất",
           brand: item.brandId?.name || item.brand || "LUMORA",
           categorySlug: item.categoryId?._id || item.categoryId || "cat-all",
-          rating: item.rating || 4.9,
+          rating: item.rating || item.averageRating || 5.0,
           reviewCount: item.reviewCount || 12,
           tag: item.tag || (item.isNew ? "Mới" : undefined),
           colors: item.colors || [],
           variantStocks: item.variantStocks || item.variants || [],
         };
       });
-
       setProducts(formattedProducts);
 
       const rawCategories = Array.isArray(catData)

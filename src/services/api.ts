@@ -272,10 +272,34 @@ export const setDefaultAddressApi = async (
 export const getProductsApi = async () => {
   try {
     const res = await apiRequest("/api/products");
-    return Array.isArray(res) ? res : res?.data || res?.products || [];
+    const rawList = Array.isArray(res) ? res : res?.data || res?.products || [];
+    return rawList.map((item: any) => {
+      const name = item.name || item.title || "Sản phẩm LUMORA";
+      const image =
+        item.images?.[0] ||
+        item.image ||
+        item.thumbnail ||
+        "https://via.placeholder.com/150";
+      const price = Number(item.price || item.originalPrice || item.minPrice || 0);
+      const rating = item.rating || item.averageRating || 5.0;
+      return {
+        ...item,
+        _id: item._id || item.id,
+        id: item._id || item.id,
+        name,
+        title: name,
+        image,
+        thumbnail: image,
+        images: Array.isArray(item.images) && item.images.length > 0 ? item.images : [image],
+        price: Number.isFinite(price) ? price : 0,
+        originalPrice: Number(item.originalPrice || item.maxPrice || price || 0),
+        rating,
+        averageRating: rating,
+      };
+    });
   } catch (err) {
     console.warn("Lỗi tải danh sách sản phẩm từ Server:", err);
-    return []; // Trả về mảng rỗng để không bao giờ bị trộn data giả
+    return [];
   }
 };
 
