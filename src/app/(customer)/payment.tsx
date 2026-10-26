@@ -156,6 +156,27 @@ export default function PaymentScreen() {
           <Text style={styles.stepSub}>Vui lòng chọn hình thức thanh toán phù hợp nhất với bạn</Text>
         </View>
 
+        {/* Địa chỉ giao hàng đã chọn ở Bước 1 */}
+        {params.fullAddress ? (
+          <View style={styles.addressSummaryCard}>
+            <View style={styles.addressSummaryHeader}>
+              <View style={styles.addressSummaryTitleRow}>
+                <Feather name="map-pin" size={13} color="#8A6A48" />
+                <Text style={styles.addressSummaryTitle}>ĐỊA CHỈ NHẬN HÀNG</Text>
+              </View>
+              <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
+                <Text style={styles.addressChangeText}>Thay đổi</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.addressRecipient}>
+              {params.receiverName || 'Người nhận'} {params.phone ? `• ${params.phone}` : ''}
+            </Text>
+            <Text style={styles.addressFullText} numberOfLines={2}>
+              {params.fullAddress}
+            </Text>
+          </View>
+        ) : null}
+
         {/* 1. Trả Tiền Mặt Khi Nhận Hàng (COD) */}
         <TouchableOpacity
           onPress={() => setSelectedMethod('cod')}
@@ -641,5 +662,51 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '700',
     letterSpacing: 0.2,
+  },
+  addressSummaryCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E8E2D8',
+    marginBottom: 14,
+    elevation: 2,
+    shadowColor: '#5C4A3A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  addressSummaryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  addressSummaryTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  addressSummaryTitle: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#8A6A48',
+    letterSpacing: 1.2,
+  },
+  addressChangeText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#8A6A48',
+  },
+  addressRecipient: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2A2421',
+    marginBottom: 3,
+  },
+  addressFullText: {
+    fontSize: 11.5,
+    color: '#7A7067',
+    lineHeight: 16,
   },
 });

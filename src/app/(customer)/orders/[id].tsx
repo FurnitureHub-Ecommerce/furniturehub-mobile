@@ -116,26 +116,61 @@ export default function OrderDetailScreen() {
     }
   };
 
-  const getStatusInfo = (status?: string) => {
-    const s = (status || '').toLowerCase();
-    switch (s) {
-      case 'delivered':
-      case 'đã giao hàng':
-        return { bg: '#E2F0D9', text: '#2E7D32', label: 'Đã Giao Hàng' };
-      case 'in_transit':
-      case 'đang giao hàng':
-      case 'đang vận chuyển':
-        return { bg: '#F5EBE1', text: '#8A6A48', label: 'Đang Vận Chuyển' };
-      case 'pending':
-      case 'chờ xử lý':
-        return { bg: '#FEF5E7', text: '#E67E22', label: 'Chờ Xử Lý' };
-      case 'rejected':
-      case 'cancelled':
-      case 'đã hủy':
-        return { bg: '#FCE8E6', text: '#D93838', label: 'Đã Hủy' };
-      default:
-        return { bg: '#E9E1D5', text: '#8A6A48', label: status || 'Đang xử lý' };
+  const getStatusInfo = (status?: string, statusLabel?: string) => {
+    const s = (status || '').toLowerCase().trim();
+    const l = (statusLabel || '').toLowerCase().trim();
+
+    if (
+      s === 'delivered' ||
+      s === 'completed' ||
+      s.includes('giao hàng') ||
+      s === 'đã giao' ||
+      l === 'đã giao hàng' ||
+      l === 'đã giao'
+    ) {
+      return { bg: '#E2F0D9', text: '#2E7D32', label: 'Đã Giao Hàng' };
     }
+    if (
+      s === 'shipping' ||
+      s === 'in_transit' ||
+      s.includes('vận chuyển') ||
+      s.includes('đang giao') ||
+      l.includes('vận chuyển') ||
+      l.includes('đang giao')
+    ) {
+      return { bg: '#F5EBE1', text: '#8A6A48', label: 'Đang Vận Chuyển' };
+    }
+    if (s === 'confirmed' || s === 'đã xác nhận' || l === 'đã xác nhận') {
+      return { bg: '#E6F4EA', text: '#137333', label: 'Đã Xác Nhận' };
+    }
+    if (
+      s === 'packing' ||
+      s === 'processing' ||
+      s === 'đang xử lý' ||
+      s === 'đang đóng gói' ||
+      l.includes('xử lý') ||
+      l.includes('đóng gói')
+    ) {
+      return { bg: '#E8F0FE', text: '#1A73E8', label: 'Đang Xử Lý' };
+    }
+    if (s === 'pending' || s === 'chờ xử lý' || l === 'chờ xử lý') {
+      return { bg: '#FEF5E7', text: '#E67E22', label: 'Chờ Xử Lý' };
+    }
+    if (
+      s === 'rejected' ||
+      s === 'cancelled' ||
+      s === 'canceled' ||
+      s.includes('hủy') ||
+      l.includes('hủy')
+    ) {
+      return { bg: '#FCE8E6', text: '#D93838', label: 'Đã Hủy' };
+    }
+
+    if (statusLabel && !/^[a-zA-Z_-]+$/.test(statusLabel)) {
+      return { bg: '#E9E1D5', text: '#8A6A48', label: statusLabel };
+    }
+
+    return { bg: '#FEF5E7', text: '#E67E22', label: 'Đang Xử Lý' };
   };
 
   if (loading) {
@@ -159,7 +194,7 @@ export default function OrderDetailScreen() {
     );
   }
 
-  const statusInfo = getStatusInfo(order.status);
+  const statusInfo = getStatusInfo(order.status, order.statusLabel);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

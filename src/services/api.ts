@@ -732,6 +732,40 @@ export const deleteVariantApi = async (
   });
 };
 
+export const formatOrderStatusVietnamese = (status?: string, rawLabel?: string): string => {
+  const s = (status || "").toLowerCase().trim();
+  const l = (rawLabel || "").toLowerCase().trim();
+
+  if (s === "delivered" || s === "completed" || s.includes("giao hàng") || s === "đã giao" || l === "đã giao hàng" || l === "đã giao") {
+    return "Đã Giao";
+  }
+  if (s === "shipping" || s === "in_transit" || s.includes("vận chuyển") || s.includes("đang giao") || l.includes("vận chuyển") || l.includes("đang giao")) {
+    return "Đang Vận Chuyển";
+  }
+  if (s === "confirmed" || s === "đã xác nhận" || l === "đã xác nhận") {
+    return "Đã Xác Nhận";
+  }
+  if (s === "packing" || s === "processing" || s === "đang xử lý" || s === "đang đóng gói") {
+    return "Đang Xử Lý";
+  }
+  if (s === "pending" || s === "chờ xử lý" || l === "chờ xử lý") {
+    return "Chờ Xử Lý";
+  }
+  if (
+    s === "rejected" ||
+    s === "cancelled" ||
+    s === "canceled" ||
+    s.includes("hủy") ||
+    l.includes("hủy")
+  ) {
+    return "Đã Hủy";
+  }
+  if (rawLabel && !/^[a-zA-Z_-]+$/.test(rawLabel)) {
+    return rawLabel;
+  }
+  return "Đang Xử Lý";
+};
+
 //=================== ORDER APIs ====================
 // Lấy danh sách đơn hàng thực tế của Customer
 export const getOrdersApi = async (): Promise<OrderItem[]> => {
@@ -747,7 +781,7 @@ export const getOrdersApi = async (): Promise<OrderItem[]> => {
         ? new Date(order.createdAt).toLocaleDateString("vi-VN")
         : order.date || "Chưa xác định",
       status: order.status || "pending",
-      statusLabel: order.statusLabel || order.status,
+      statusLabel: formatOrderStatusVietnamese(order.status, order.statusLabel),
       cancelReason: order.cancelReason || order.cancellationReason || order.reason,
       cancellationReason: order.cancellationReason || order.cancelReason || order.reason,
       total: order.totalAmount ?? order.total ?? 0,
@@ -823,7 +857,7 @@ export const getOrderDetailApi = async (id: string): Promise<OrderItem> => {
         ? new Date(order.updatedAt).toLocaleDateString("vi-VN")
         : "Đang cập nhật",
     status: order.status || "pending",
-    statusLabel: order.statusLabel || order.status,
+    statusLabel: formatOrderStatusVietnamese(order.status, order.statusLabel),
     cancelReason: order.cancelReason || order.cancellationReason || order.reason,
     cancellationReason: order.cancellationReason || order.cancelReason || order.reason,
     total: order.totalAmount ?? order.total ?? 0,
