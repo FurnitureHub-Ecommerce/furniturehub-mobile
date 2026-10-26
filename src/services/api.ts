@@ -871,17 +871,28 @@ export const createOrderApi = async (orderPayload: { addressId: string }) => {
     body: JSON.stringify(orderPayload),
   });
 };
-export const cancelOrderApi = async (id: string, reason?: string) => {
+export const cancelOrderApi = async (
+  id: string,
+  payloadOrReason?: string | { reason?: string },
+) => {
+  const reasonText =
+    typeof payloadOrReason === "string"
+      ? payloadOrReason
+      : payloadOrReason?.reason || "Khách hàng yêu cầu hủy đơn";
+
   try {
     return await apiRequest(`/api/orders/${id}/cancel`, {
       method: "PATCH",
-      body: JSON.stringify({ reason: reason || "Khách hàng yêu cầu hủy đơn" }),
+      body: JSON.stringify({ reason: reasonText }),
     });
   } catch (err) {
     console.warn(`Mô phỏng hủy đơn hàng ${id} thành công (fallback):`, err);
     return { success: true, message: "Đã hủy đơn hàng thành công" };
   }
 };
+
+// Alias hỗ trợ gọi trực tiếp cancelOrder(orderId, { reason: cancelReason })
+export const cancelOrder = cancelOrderApi;
 
 export const getOrderTrackingApi = async (id: string) => {
   try {

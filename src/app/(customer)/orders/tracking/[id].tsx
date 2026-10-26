@@ -7,6 +7,9 @@ import {
   ScrollView,
   Platform,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -15,12 +18,164 @@ import {
   getOrderTrackingApi,
   getOrderDetailApi,
   getUserProfileApi,
+  cancelOrderApi,
   OrderItem,
 } from "@/services/api";
 
 const FONTS = {
   SERIF: Platform.OS === "ios" ? "Didot" : "serif",
   SANS: Platform.OS === "ios" ? "System" : "sans-serif",
+};
+
+const CANCEL_REASONS = [
+  "Muốn thay đổi địa chỉ nhận hàng",
+  "Muốn thay đổi sản phẩm (kích thước, màu sắc, số lượng)",
+  "Thời gian giao hàng dự kiến quá lâu",
+  "Tìm thấy mức giá tốt hơn ở nơi khác",
+  "Đổi ý, không còn nhu cầu đặt mua",
+  "Khác",
+];
+
+interface CancelOrderModalProps {
+  visible: boolean;
+  isSubmitting: boolean;
+  onClose: () => void;
+  onConfirm: (reason: string) => void;
+}
+
+const CancelOrderModal: React.FC<CancelOrderModalProps> = ({
+  visible,
+  isSubmitting,
+  onClose,
+  onConfirm,
+}) => {
+  const [selectedReason, setSelectedReason] = useState<string>("");
+  const [customReason, setCustomReason] = useState<string>("");
+
+  useEffect(() => {
+    if (!visible) {
+      setSelectedReason("");
+      setCustomReason("");
+    }
+  }, [visible]);
+
+  const cancelReason =
+    selectedReason === "Khác" ? customReason.trim() : selectedReason.trim();
+  const isConfirmDisabled = !cancelReason || isSubmitting;
+
+  const handleConfirmPress = () => {
+    if (isConfirmDisabled) return;
+    onConfirm(cancelReason);
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCard}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Lý Do Hủy Đơn Hàng</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              disabled={isSubmitting}
+              style={styles.modalCloseIcon}
+            >
+              <Feather name="x" size={18} color="#2A2421" />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.modalSubtitle}>
+            Vui lòng chọn hoặc nhập lý do hủy đơn hàng của bạn:
+          </Text>
+
+          <View style={styles.reasonList}>
+            {CANCEL_REASONS.map((reason) => {
+              const isSelected = selectedReason === reason;
+              return (
+                <TouchableOpacity
+                  key={reason}
+                  activeOpacity={0.75}
+                  onPress={() => setSelectedReason(reason)}
+                  style={[
+                    styles.radioItem,
+                    isSelected && styles.radioItemActive,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.radioOuter,
+                      isSelected && styles.radioOuterActive,
+                    ]}
+                  >
+                    {isSelected && <View style={styles.radioInner} />}
+                  </View>
+                  <Text
+                    style={[
+                      styles.radioLabel,
+                      isSelected && styles.radioLabelActive,
+                    ]}
+                  >
+                    {reason}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {selectedReason === "Khác" && (
+            <TextInput
+              style={styles.customReasonInput}
+              placeholder="Nhập lý do hủy đơn cụ thể của bạn..."
+              placeholderTextColor="#9A9086"
+              value={customReason}
+              onChangeText={setCustomReason}
+              multiline
+              numberOfLines={3}
+            />
+          )}
+
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={styles.modalBackBtn}
+              onPress={onClose}
+              disabled={isSubmitting}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalBackBtnText}>Đóng</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.modalConfirmBtn,
+                isConfirmDisabled && styles.modalConfirmBtnDisabled,
+              ]}
+              onPress={handleConfirmPress}
+              disabled={isConfirmDisabled}
+              activeOpacity={0.85}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.modalConfirmBtnText}>Xác nhận hủy</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+// Hàm hủy đơn theo đúng yêu cầu: await cancelOrder(orderId, { reason: cancelReason })
+const cancelOrder = async (
+  orderId: string,
+  payload: { reason: string },
+) => {
+  return await cancelOrderApi(orderId, payload.reason);
 };
 
 export default function OrderTrackingScreen() {
@@ -30,6 +185,11 @@ export default function OrderTrackingScreen() {
   const [order, setOrder] = useState<OrderItem | null>(null);
   const [trackingData, setTrackingData] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
+
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelReasonText, setCancelReasonText] = useState<string>("");
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const loadTrackingData = async () => {
@@ -81,7 +241,7 @@ export default function OrderTrackingScreen() {
     if (s === "confirmed" || s === "đã xác nhận" || s === "packing")
       return "Đã xác nhận";
     if (s === "cancelled" || s === "rejected" || s === "đã hủy")
-      return "Đã hủy";
+      return "ĐÃ HỦY";
     return "Chờ xử lý";
   };
 
@@ -95,6 +255,53 @@ export default function OrderTrackingScreen() {
       month: "2-digit",
       year: "numeric",
     });
+  };
+
+  // Xử lý khi bấm 'Xác nhận hủy' trong CancelOrderModal
+  const handleConfirmCancelOrder = async (cancelReason: string) => {
+    const orderId = String(id || order?.id || "");
+    if (!orderId) return;
+
+    try {
+      setIsCancelling(true);
+
+      // Gọi API hủy đơn kèm body payload lý do
+      await cancelOrder(orderId, { reason: cancelReason });
+
+      const nowIso = new Date().toISOString();
+
+      // Cập nhật ngay trạng thái đơn hàng sang 'ĐÃ HỦY' trên giao diện & Timeline
+      setCancelReasonText(cancelReason);
+      setTrackingData((prev: any) => ({
+        ...(prev || {}),
+        status: "cancelled",
+        updatedAt: nowIso,
+        cancelReason,
+      }));
+      setOrder((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "cancelled",
+              statusLabel: "ĐÃ HỦY",
+            }
+          : prev,
+      );
+
+      setCancelModalVisible(false);
+
+      // Hiển thị Toast & Alert thông báo hủy thành công
+      setToastMessage("Đã hủy đơn hàng thành công");
+      setTimeout(() => setToastMessage(null), 3000);
+      Alert.alert("Thành công", "Đơn hàng của bạn đã được hủy thành công.");
+    } catch (error: any) {
+      Alert.alert(
+        "Lỗi",
+        error?.message || "Không thể hủy đơn hàng lúc này. Vui lòng thử lại.",
+      );
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   // Tạo Timeline 4 bước chuẩn
@@ -113,6 +320,12 @@ export default function OrderTrackingScreen() {
       rawStatus === "đã hủy";
 
     if (isCancelled) {
+      const reasonToDisplay =
+        cancelReasonText ||
+        trackingData?.cancelReason ||
+        trackingData?.reason ||
+        "Đã xác nhận hủy giao dịch";
+
       return [
         {
           step: 1,
@@ -123,11 +336,11 @@ export default function OrderTrackingScreen() {
         },
         {
           step: 2,
-          title: rawStatus === "rejected" ? "Đã từ chối" : "Đơn hàng đã hủy",
+          title: rawStatus === "rejected" ? "Đã từ chối" : "ĐÃ HỦY",
           description:
             rawStatus === "rejected"
               ? "Hết hàng hoặc thông tin không hợp lệ"
-              : "Đã xác nhận hủy giao dịch",
+              : `Lý do: ${reasonToDisplay}`,
           time: updatedTime,
           completed: true,
           isError: true,
@@ -215,6 +428,17 @@ export default function OrderTrackingScreen() {
 
   const statusBadge = getStatusBadgeInfo();
   const rawSystemStatus = trackingData?.status || order?.status;
+  const normalizedStatus = (rawSystemStatus || "").toLowerCase().trim();
+
+  // Kiểm tra trạng thái đã hủy hoặc đã giao để ẩn nút Hủy đơn hàng
+  const isOrderCancelled =
+    normalizedStatus === "cancelled" ||
+    normalizedStatus === "rejected" ||
+    normalizedStatus === "đã hủy" ||
+    statusBadge.label === "ĐÃ HỦY";
+
+  const isOrderDelivered =
+    normalizedStatus === "delivered" || normalizedStatus === "đã giao hàng";
 
   // Lấy thông tin họ tên, điện thoại, địa chỉ chi tiết
   const recipientName =
@@ -306,7 +530,12 @@ export default function OrderTrackingScreen() {
               </View>
               <View style={styles.infoCol}>
                 <Text style={styles.infoSub}>Trạng thái hệ thống</Text>
-                <Text style={styles.infoVal}>
+                <Text
+                  style={[
+                    styles.infoVal,
+                    isOrderCancelled && { color: "#D93838", fontWeight: "700" },
+                  ]}
+                >
                   {formatStatusLabel(rawSystemStatus)}
                 </Text>
               </View>
@@ -378,7 +607,7 @@ export default function OrderTrackingScreen() {
                         style={[
                           styles.stepTitle,
                           isCompleted && styles.stepTitleActive,
-                          isError && { color: "#D93838" },
+                          isError && { color: "#D93838", fontWeight: "700" },
                         ]}
                       >
                         {step.title}
@@ -419,7 +648,35 @@ export default function OrderTrackingScreen() {
               </Text>
             </View>
           </View>
+
+          {/* Nút Hủy đơn hàng: Tự động ẩn khi đơn đã hủy hoặc đã giao */}
+          {!isOrderCancelled && !isOrderDelivered && (
+            <TouchableOpacity
+              style={styles.cancelOrderBtn}
+              activeOpacity={0.85}
+              onPress={() => setCancelModalVisible(true)}
+            >
+              <Feather name="x-circle" size={17} color="#D93838" />
+              <Text style={styles.cancelOrderBtnText}>Hủy đơn hàng</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
+      )}
+
+      {/* Modal chọn hoặc nhập lý do hủy đơn */}
+      <CancelOrderModal
+        visible={cancelModalVisible}
+        isSubmitting={isCancelling}
+        onClose={() => setCancelModalVisible(false)}
+        onConfirm={handleConfirmCancelOrder}
+      />
+
+      {/* Toast thông báo hủy thành công */}
+      {toastMessage && (
+        <View style={styles.toastBanner}>
+          <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+          <Text style={styles.toastBannerText}>{toastMessage}</Text>
+        </View>
       )}
     </SafeAreaView>
   );
@@ -721,20 +978,17 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
-    fontFamily: Platform.OS === 'ios' ? 'serif' : 'serif',
   },
   addressHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     marginBottom: 8,
-    fontFamily: Platform.OS === 'ios' ? 'Palatino' : 'serif',
   },
   addressHeaderTitle: {
     fontSize: 12.5,
     fontWeight: "700",
     color: "#af671b",
-   
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
@@ -752,5 +1006,174 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
+  },
+  cancelOrderBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF5F5",
+    borderWidth: 1,
+    borderColor: "#D93838",
+    borderRadius: 14,
+    paddingVertical: 14,
+    marginTop: 16,
+    gap: 8,
+  },
+  cancelOrderBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#D93838",
+    fontFamily: FONTS.SANS,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#E8E2D8",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#2A2421",
+    fontFamily: FONTS.SANS,
+  },
+  modalCloseIcon: {
+    padding: 4,
+  },
+  modalSubtitle: {
+    fontSize: 12.5,
+    color: "#7A7067",
+    marginBottom: 14,
+    fontFamily: FONTS.SANS,
+  },
+  reasonList: {
+    marginBottom: 10,
+  },
+  radioItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    marginBottom: 4,
+  },
+  radioItemActive: {
+    backgroundColor: "#FAF7F2",
+  },
+  radioOuter: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#B8AEA2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 10,
+  },
+  radioOuterActive: {
+    borderColor: "#8A6A48",
+  },
+  radioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#8A6A48",
+  },
+  radioLabel: {
+    flex: 1,
+    fontSize: 13,
+    color: "#2A2421",
+    fontFamily: FONTS.SANS,
+  },
+  radioLabelActive: {
+    fontWeight: "600",
+    color: "#8A6A48",
+  },
+  customReasonInput: {
+    minHeight: 78,
+    borderWidth: 1,
+    borderColor: "#E8E2D8",
+    borderRadius: 10,
+    backgroundColor: "#FAF7F2",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: "#2A2421",
+    textAlignVertical: "top",
+    marginBottom: 14,
+    fontFamily: FONTS.SANS,
+  },
+  modalFooter: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 8,
+  },
+  modalBackBtn: {
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    borderRadius: 10,
+    backgroundColor: "#EAE2D5",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalBackBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#2A2421",
+    fontFamily: FONTS.SANS,
+  },
+  modalConfirmBtn: {
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    backgroundColor: "#D93838",
+    minWidth: 125,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalConfirmBtnDisabled: {
+    backgroundColor: "#E5A9A9",
+    opacity: 0.65,
+  },
+  modalConfirmBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    fontFamily: FONTS.SANS,
+  },
+  toastBanner: {
+    position: "absolute",
+    bottom: 24,
+    left: 20,
+    right: 20,
+    backgroundColor: "#2A2421",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  toastBannerText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
+    fontFamily: FONTS.SANS,
   },
 });
