@@ -1,24 +1,22 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   TouchableOpacity,
   ScrollView,
-  TextInput,
   Platform,
   Alert,
   ActivityIndicator,
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useApp } from '@/context/AppContext';
 import {
   getAddressesApi,
-  getUserProfileApi,
   AddressItem,
   formatCurrency,
 } from '@/services/api';
@@ -36,44 +34,22 @@ export default function CheckoutScreen() {
   const [addresses, setAddresses] = useState<AddressItem[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
 
-  // Form state
-  const [receiverName, setReceiverName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [addressLine, setAddressLine] = useState('');
-  const [ward, setWard] = useState('');
-  const [city, setCity] = useState('');
-
-  // Load thông tin Profile & Địa chỉ thực từ Backend API
+  // Load danh sách địa chỉ đã lưu từ Backend API
   const fetchCheckoutData = useCallback(async () => {
     try {
       setLoading(true);
       const token = await AsyncStorage.getItem('token');
-
-      const [userProfile, addressList] = await Promise.all([
-        getUserProfileApi(token || undefined).catch(() => null),
-        getAddressesApi(token || undefined).catch(() => []),
-      ]);
-
+      const addressList = await getAddressesApi(token || undefined).catch(() => []);
       const list = Array.isArray(addressList) ? addressList : [];
       setAddresses(list);
 
-      const defaultAddr = list.find((a: any) => a.isDefault) || list[0];
-      if (defaultAddr) {
-        setSelectedAddressId(defaultAddr._id || defaultAddr.id || null);
-        setReceiverName(
-          defaultAddr.receiverName || defaultAddr.fullName || defaultAddr.name || ''
-        );
-        setPhone(defaultAddr.phone || defaultAddr.phoneNumber || '');
-        setAddressLine(
-          defaultAddr.addressLine || defaultAddr.street || defaultAddr.address || ''
-        );
-        setWard(defaultAddr.ward || '');
-        setCity(defaultAddr.city || defaultAddr.province || '');
-      } else if (userProfile) {
-        const user = userProfile.data || userProfile;
-        if (user.fullName) setReceiverName(user.fullName);
-        if (user.phone) setPhone(user.phone);
-      }
+      setSelectedAddressId((prevId) => {
+        if (prevId && list.some((a: any) => (a._id || a.id) === prevId)) {
+          return prevId;
+        }
+        const defaultAddr = list.find((a: any) => a.isDefault) || list[0];
+        return defaultAddr ? (defaultAddr._id || defaultAddr.id || null) : null;
+      });
     } catch (err) {
       console.warn('Lỗi tải thông tin giao hàng:', err);
     } finally {
@@ -81,53 +57,23 @@ export default function CheckoutScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchCheckoutData();
-  }, [fetchCheckoutData]);
+  // Tự động tải lại khi quay lại từ màn hình quản lý địa chỉ
+  useFocusEffect(
+    useCallback(() => {
+      fetchCheckoutData();
+    }, [fetchCheckoutData])
+  );
 
   const handleSelectAddress = (addr: AddressItem) => {
     const id = addr._id || addr.id || null;
     setSelectedAddressId(id);
-    setReceiverName(addr.receiverName || addr.fullName || addr.name || '');
-    setPhone(addr.phone || addr.phoneNumber || '');
-    setAddressLine(addr.addressLine || addr.street || addr.address || '');
-    setWard(addr.ward || '');
-    setCity(addr.city || addr.province || '');
   };
 
-  // const handleProceedToPayment = () => {
-  //   if (!receiverName.trim() || !phone.trim() || !addressLine.trim()) {
-  //     Alert.alert(
-  //       'Thiếu thông tin',
-  //       'Vui lòng nhập đầy đủ tên người nhận, số điện thoại và địa chỉ giao hàng.'
-  //     );
-  //     return;
-  //   }
-
-  //   if (cart.length === 0) {
-  //     Alert.alert('Giỏ hàng trống', 'Vui lòng chọn sản phẩm trước khi thanh toán.');
-  //     return;
-  //   }
-
-  //   router.push({
-  //     pathname: '/(customer)/payment',
-  //     params: {
-  //       receiverName: receiverName.trim(),
-  //       phone: phone.trim(),
-  //       addressLine: addressLine.trim(),
-  //       ward: ward.trim(),
-  //       city: city.trim(),
-  //       fullAddress: `${addressLine.trim()}${ward ? `, ${ward.trim()}` : ''}${city ? `, ${city.trim()}` : ''}`,
-  //     },
-  //   } as any);
-  // };
-
   const handleProceedToPayment = () => {
-    // 1. Kiểm tra đã có addressId từ địa chỉ đã lưu chưa
     if (!selectedAddressId) {
       Alert.alert(
         'Thiếu địa chỉ',
-        'Vui lòng chọn 1 địa chỉ giao hàng trong danh sách hoặc tạo địa chỉ mới.'
+        'Vui lòng chọn 1 địa chỉ giao hàng trong danh sách hoặc bấm "Thêm địa chỉ mới".'
       );
       return;
     }
@@ -137,14 +83,33 @@ export default function CheckoutScreen() {
       return;
     }
 
-    // 2. Chuyển addressId sang trang Payment
+    const selectedAddr = addresses.find(
+      (a: any) => (a._id || a.id) === selectedAddressId
+    );
+
+    const name =
+      selectedAddr?.receiverName ||
+      selectedAddr?.fullName ||
+      selectedAddr?.name ||
+      'Người nhận';
+    const phoneNum =
+      selectedAddr?.phone || selectedAddr?.phoneNumber || '';
+    const detail =
+      selectedAddr?.addressLine ||
+      selectedAddr?.street ||
+      selectedAddr?.address ||
+      '';
+    const full = [detail, selectedAddr?.ward, selectedAddr?.city]
+      .filter(Boolean)
+      .join(', ');
+
     router.push({
       pathname: '/(customer)/payment',
       params: {
         addressId: selectedAddressId,
-        receiverName: receiverName.trim(),
-        phone: phone.trim(),
-        fullAddress: `${addressLine.trim()}${ward ? `, ${ward.trim()}` : ''}${city ? `, ${city.trim()}` : ''}`,
+        receiverName: name,
+        phone: phoneNum,
+        fullAddress: full,
       },
     } as any);
   };
@@ -172,7 +137,7 @@ export default function CheckoutScreen() {
         >
           <Feather name="arrow-left" size={18} color="#2A2421" />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif' }]}>
+        <Text style={styles.headerTitle}>
           Địa Chỉ Giao Hàng
         </Text>
         <TouchableOpacity onPress={fetchCheckoutData} style={styles.iconButton} activeOpacity={0.7}>
@@ -187,28 +152,56 @@ export default function CheckoutScreen() {
           <Text style={styles.stepSub}>Vận chuyển & lắp đặt bởi đội ngũ White-Glove Concierge</Text>
         </View>
 
-        {/* Sổ Địa Chỉ Đã Lưu */}
-        {addresses.length > 0 && (
-          <View style={styles.sectionBlock}>
-            <Text style={styles.sectionTitle}>ĐỊA CHỈ ĐÃ LƯU</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.addressScroll}>
+        {/* Sổ Địa Chỉ Giao Hàng */}
+        <View style={styles.sectionBlock}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>ĐỊA CHỈ NHẬN HÀNG</Text>
+            <TouchableOpacity
+              onPress={() => router.push('/(customer)/account/address' as any)}
+              style={styles.manageAddressBtn}
+              activeOpacity={0.7}
+            >
+              <Feather name="plus-circle" size={13} color="#8A6A48" />
+              <Text style={styles.manageAddressText}>Thêm / Quản lý</Text>
+            </TouchableOpacity>
+          </View>
+
+          {addresses.length === 0 ? (
+            <View style={styles.emptyAddressCard}>
+              <Feather name="map-pin" size={28} color="#C2B8A3" />
+              <Text style={styles.emptyAddressTitle}>Chưa có địa chỉ giao hàng</Text>
+              <Text style={styles.emptyAddressSub}>
+                Vui lòng tạo địa chỉ nhận hàng để tiếp tục đặt đơn
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/(customer)/account/address' as any)}
+                style={styles.addAddressNowBtn}
+                activeOpacity={0.8}
+              >
+                <Feather name="plus" size={14} color="#FFFFFF" />
+                <Text style={styles.addAddressNowText}>Thêm Địa Chỉ Mới</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.addressList}>
               {addresses.map((addr) => {
                 const addrId = addr._id || addr.id;
                 const isSelected = selectedAddressId === addrId;
                 const name = addr.receiverName || addr.fullName || addr.name || 'Người nhận';
                 const detail = addr.addressLine || addr.street || addr.address || '';
+                const full = [detail, addr.ward, addr.city].filter(Boolean).join(', ');
 
                 return (
                   <TouchableOpacity
                     key={addrId}
                     onPress={() => handleSelectAddress(addr)}
-                    style={[styles.addressPill, isSelected && styles.addressPillSelected]}
+                    style={[styles.addressCard, isSelected && styles.addressCardSelected]}
                     activeOpacity={0.8}
                   >
                     <View style={styles.addrHeaderRow}>
                       <Ionicons
                         name={isSelected ? 'radio-button-on' : 'radio-button-off'}
-                        size={16}
+                        size={18}
                         color={isSelected ? '#8A6A48' : '#A0988E'}
                       />
                       <Text style={styles.addrName} numberOfLines={1}>{name}</Text>
@@ -218,90 +211,23 @@ export default function CheckoutScreen() {
                         </View>
                       )}
                     </View>
-                    <Text style={styles.addrPhone}>{addr.phone || addr.phoneNumber}</Text>
-                    <Text style={styles.addrLine} numberOfLines={2}>
-                      {[detail, addr.ward, addr.city].filter(Boolean).join(', ')}
-                    </Text>
+                    <View style={styles.addrInfoRow}>
+                      <Feather name="phone" size={12} color="#7A7067" />
+                      <Text style={styles.addrPhone}>
+                        {addr.phone || addr.phoneNumber || 'Chưa cập nhật SĐT'}
+                      </Text>
+                    </View>
+                    <View style={styles.addrInfoRow}>
+                      <Feather name="map-pin" size={12} color="#7A7067" />
+                      <Text style={styles.addrLine} numberOfLines={2}>
+                        {full || 'Chưa có địa chỉ chi tiết'}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 );
               })}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Form Điền Chi Tiết */}
-        <View style={styles.cardForm}>
-          <Text style={styles.sectionTitle}>THÔNG TIN NGƯỜI NHẬN</Text>
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>HỌ VÀ TÊN *</Text>
-            <View style={styles.inputWrapper}>
-              <Feather name="user" size={15} color="#8A6A48" style={styles.inputIcon} />
-              <TextInput
-                style={styles.inputText}
-                placeholder="Nguyễn Văn A"
-                placeholderTextColor="#A0988E"
-                value={receiverName}
-                onChangeText={setReceiverName}
-              />
             </View>
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>SỐ ĐIỆN THOẠI *</Text>
-            <View style={styles.inputWrapper}>
-              <Feather name="phone" size={15} color="#8A6A48" style={styles.inputIcon} />
-              <TextInput
-                style={styles.inputText}
-                placeholder="0901 234 567"
-                placeholderTextColor="#A0988E"
-                keyboardType="phone-pad"
-                value={phone}
-                onChangeText={setPhone}
-              />
-            </View>
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>ĐỊA CHỈ NHÀ / TÊN ĐƯỜNG *</Text>
-            <View style={styles.inputWrapper}>
-              <Feather name="map-pin" size={15} color="#8A6A48" style={styles.inputIcon} />
-              <TextInput
-                style={styles.inputText}
-                placeholder="Số 138, Đường Lê Lợi"
-                placeholderTextColor="#A0988E"
-                value={addressLine}
-                onChangeText={setAddressLine}
-              />
-            </View>
-          </View>
-
-          <View style={styles.rowGrid}>
-            <View style={[styles.fieldGroup, { flex: 1 }]}>
-              <Text style={styles.fieldLabel}>PHƯỜNG / XÃ</Text>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={styles.inputText}
-                  placeholder="Phường Bến Nghé"
-                  placeholderTextColor="#A0988E"
-                  value={ward}
-                  onChangeText={setWard}
-                />
-              </View>
-            </View>
-            <View style={[styles.fieldGroup, { flex: 1 }]}>
-              <Text style={styles.fieldLabel}>TỈNH / THÀNH PHỐ</Text>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={styles.inputText}
-                  placeholder="Hồ Chí Minh"
-                  placeholderTextColor="#A0988E"
-                  value={city}
-                  onChangeText={setCity}
-                />
-              </View>
-            </View>
-          </View>
+          )}
         </View>
 
         {/* Khối Giao Hàng White-Glove */}
@@ -313,7 +239,7 @@ export default function CheckoutScreen() {
             <Text style={styles.deliveryTitle}>Vận Chuyển Cao Cấp White-Glove</Text>
             <Text style={styles.deliveryDesc}>Bao gồm vận chuyển chuyên dụng, hỗ trợ dỡ hộp & lắp đặt</Text>
           </View>
-          <Text style={styles.deliveryFee}>{formatCurrency(shipping)}</Text>
+          <Text style={styles.deliveryFee}>Miễn phí</Text>
         </View>
 
         {/* Tóm Tắt Đơn Hàng */}
@@ -325,7 +251,7 @@ export default function CheckoutScreen() {
           </View>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Phí giao hàng White-Glove</Text>
-            <Text style={styles.summaryVal}>{formatCurrency(shipping)}</Text>
+            <Text style={styles.summaryVal}>Miễn phí</Text>
           </View>
           <View style={styles.dividerLine} />
           <View style={styles.summaryRow}>
@@ -384,9 +310,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#2A2421',
+    color: '#2b221d',
   },
   scrollContent: {
     padding: 16,
@@ -411,104 +337,124 @@ const styles = StyleSheet.create({
   sectionBlock: {
     marginBottom: 16,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
   sectionTitle: {
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: '700',
     color: '#8A6A48',
-    letterSpacing: 0.2,
-    marginBottom: 10,
-    fontFamily: Platform.OS === 'ios' ? 'serif' : 'serif',
+    letterSpacing: 1.2,
+    includeFontPadding: false,
   },
-  addressScroll: {
+  manageAddressBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  manageAddressText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8A6A48',
+  },
+  addressList: {
     gap: 10,
-    paddingRight: 8,
-    width: '100%',
   },
-  addressPill: {
-     width: '100%',
+  addressCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1.5,
     borderColor: '#E8E2D8',
+    elevation: 1,
+    shadowColor: '#5C4A3A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
   },
-  addressPillSelected: {
+  addressCardSelected: {
     borderColor: '#8A6A48',
     backgroundColor: '#FAF7F2',
   },
   addrHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
+    gap: 8,
+    marginBottom: 6,
   },
   addrName: {
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: '700',
     color: '#2A2421',
     flex: 1,
   },
   defaultTag: {
     backgroundColor: '#EAE2D5',
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 4,
   },
   defaultTagText: {
-    fontSize: 9,
+    fontSize: 9.5,
     fontWeight: '700',
     color: '#8A6A48',
   },
-  addrPhone: {
-    fontSize: 11.5,
-    color: '#7A7067',
-    marginBottom: 2,
-  },
-  addrLine: {
-    fontSize: 11,
-    color: '#7A7067',
-    lineHeight: 15,
-  },
-  cardForm: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E8E2D8',
-    marginBottom: 16,
-  },
-  fieldGroup: {
-    marginBottom: 12,
-  },
-  fieldLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#8A6A48',
-    letterSpacing: 0.8,
-    marginBottom: 6,
-  },
-  inputWrapper: {
+  addrInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 44,
-    backgroundColor: '#FAF7F2',
-    borderRadius: 10,
+    gap: 6,
+    marginTop: 3,
+  },
+  addrPhone: {
+    fontSize: 12,
+    color: '#5C544E',
+    fontWeight: '500',
+  },
+  addrLine: {
+    flex: 1,
+    fontSize: 12,
+    color: '#7A7067',
+    lineHeight: 16,
+  },
+  emptyAddressCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 24,
     borderWidth: 1,
     borderColor: '#E8E2D8',
-    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  inputIcon: {
-    marginRight: 8,
-  },
-  inputText: {
-    flex: 1,
-    fontSize: 13,
+  emptyAddressTitle: {
+    fontSize: 14,
+    fontWeight: '700',
     color: '#2A2421',
-    height: '100%',
+    marginTop: 10,
+    marginBottom: 4,
   },
-  rowGrid: {
+  emptyAddressSub: {
+    fontSize: 12,
+    color: '#7A7067',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 16,
+  },
+  addAddressNowBtn: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#8A6A48',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+  },
+  addAddressNowText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   deliveryBox: {
     flexDirection: 'row',

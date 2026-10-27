@@ -179,7 +179,9 @@ export default function LumoraHomeScreen() {
 
   const categoryFlatListRef = useRef<FlatList<Category>>(null);
 
-  const fetchHomeData = async () => {
+  
+
+const fetchHomeData = async () => {
     try {
       setIsLoading(true);
 
@@ -192,9 +194,19 @@ export default function LumoraHomeScreen() {
         ? prodData
         : prodData.data || prodData.products || [];
 
-      // Giữ nguyên object gốc (bao gồm variantStocks từ Backend)
       const formattedProducts = rawProducts.map((item: any) => {
         const realId = String(item._id || item.id);
+        const rawCat = item.categoryId;
+        
+        // Trích xuất ID danh mục chuẩn xác
+        const resolvedCatSlug = typeof rawCat === 'object' && rawCat !== null
+          ? String(rawCat._id || rawCat.id || "").trim()
+          : String(rawCat || "").trim();
+
+        const rawCatName = typeof rawCat === 'object' && rawCat !== null
+          ? String(rawCat.name || "").toLowerCase().trim()
+          : String(item.categoryName || item.category || "").toLowerCase().trim();
+
         const firstImage =
           item.images && Array.isArray(item.images) && item.images.length > 0
             ? item.images[0]
@@ -207,21 +219,26 @@ export default function LumoraHomeScreen() {
           id: realId,
           title: item.name || item.title || "Sản phẩm nội thất",
           price: item.minPrice ?? item.price ?? 0,
-          originalPrice: item.originalPrice || item.maxPrice,
+         originalPrice: (item.originalPrice || item.maxPrice  || 0) + 1000000,
           image: firstImage,
-          category:
-            item.categoryName ||
-            item.categoryId?.name ||
-            item.category ||
-            "Nội Thất",
+          category: item.categoryName || item.categoryId?.name || item.category || "Nội Thất",
           brand: item.brandId?.name || item.brand || "LUMORA",
-          categorySlug: item.categoryId?._id || item.categoryId || "cat-all",
-          rating: item.rating || 4.9,
-          reviewCount: item.reviewCount || 12,
+          categorySlug: resolvedCatSlug || "cat-all",
+          categoryName: rawCatName,
+          rating: item.averageRating ?? item.rating ?? 4.9,
+          reviewCount: item.reviewCount ?? item.totalReviews ?? 0,
           tag: item.tag || (item.isNew ? "Mới" : undefined),
           colors: item.colors || [],
           variantStocks: item.variantStocks || item.variants || [],
+          createdAt: item.createdAt || new Date().toISOString(),
         };
+      });
+
+      // Sắp xếp sản phẩm từ cũ đến mới (cũ nhất lên trước)
+      formattedProducts.sort((a: any, b: any) => {
+        const timeA = new Date(a.createdAt || 0).getTime();
+        const timeB = new Date(b.createdAt || 0).getTime();
+        return timeA - timeB;
       });
 
       setProducts(formattedProducts);
@@ -231,7 +248,7 @@ export default function LumoraHomeScreen() {
         : catData.categories || catData.data || [];
 
       const formattedCategories = rawCategories.map((cat: any) => {
-        const catId = cat._id || cat.id;
+        const catId = String(cat._id || cat.id || "").trim();
         const catName = cat.name || "";
         let catImage = cat.image || cat.imageUrl || cat.thumbnail || cat.icon;
         if (Array.isArray(cat.images) && cat.images.length > 0) {
@@ -355,14 +372,21 @@ export default function LumoraHomeScreen() {
     [router],
   );
 
-  const filteredProducts = products.filter((prod) => {
-    if (
-      selectedCategory !== "cat-all" &&
-      prod.categorySlug !== selectedCategory
-    ) {
-      return false;
-    }
-    return true;
+const filteredProducts = products.filter((prod: any) => {
+    if (selectedCategory === "cat-all") return true;
+
+    const targetId = String(selectedCategory).toLowerCase().trim();
+    const prodCatSlug = String(prod.categorySlug || "").toLowerCase().trim();
+    const prodCatName = String(prod.categoryName || prod.category || "").toLowerCase().trim();
+
+    const matchedCat = categoriesList.find((c) => String(c.id).toLowerCase().trim() === targetId);
+    const matchedCatName = matchedCat ? String(matchedCat.name).toLowerCase().trim() : "";
+
+    return (
+      prodCatSlug === targetId ||
+      prodCatName === targetId ||
+      (matchedCatName && prodCatName === matchedCatName)
+    );
   });
 
   const renderHeader = () => (

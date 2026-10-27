@@ -15,11 +15,11 @@ import {
   Dimensions,
   FlatList,
   Animated,
-  SafeAreaView,
   Alert,
   ActivityIndicator,
   Platform,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather, Ionicons } from "@expo/vector-icons";
@@ -926,7 +926,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     color: "#8A6A48",
-    fontFamily: Platform.OS === 'ios' ? 'serif' : 'serif',
     marginTop: 5,
   },
   selectedVariantNote: {

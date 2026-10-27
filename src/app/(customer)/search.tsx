@@ -12,13 +12,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { getProductsApi, formatCurrency } from '@/services/api';
-import { Product } from '@/services/mockData';
+import { getProductsApi } from '@/services/api';
 
-export default function SearchScreen() {
+export default function SearchScreen({ navigation }: any) {
   const router = useRouter();
   const [query, setQuery] = useState('');
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [allProducts, setAllProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,9 +25,13 @@ export default function SearchScreen() {
       try {
         setLoading(true);
         const data = await getProductsApi();
-        setAllProducts(data);
+        const list = Array.isArray(data)
+          ? data
+          : (data as any)?.data || (data as any)?.products || [];
+        setAllProducts(list);
       } catch (err) {
         console.warn('Lỗi tải sản phẩm cho tìm kiếm:', err);
+        setAllProducts([]);
       } finally {
         setLoading(false);
       }
@@ -45,16 +48,32 @@ export default function SearchScreen() {
     'Phòng Ngủ Tối Giản',
   ];
 
-  const searchResults = allProducts.filter((prod) => {
+  const searchResults = allProducts.filter((prod: any) => {
     if (!query.trim()) return false;
     const q = query.toLowerCase().trim();
+    const prodName = String(prod.name || prod.title || '').toLowerCase();
+    const prodCategory = String(
+      prod.categoryName || prod.categoryId?.name || prod.category || '',
+    ).toLowerCase();
+    const prodBrand = String(prod.brandId?.name || prod.brand || '').toLowerCase();
+    const prodDesc = String(prod.description || '').toLowerCase();
+
     return (
-      (prod.title && prod.title.toLowerCase().includes(q)) ||
-      (prod.category && prod.category.toLowerCase().includes(q)) ||
-      (prod.brand && prod.brand.toLowerCase().includes(q)) ||
-      (prod.description && prod.description.toLowerCase().includes(q))
+      prodName.includes(q) ||
+      prodCategory.includes(q) ||
+      prodBrand.includes(q) ||
+      prodDesc.includes(q)
     );
   });
+
+  const handlePressProduct = (item: any) => {
+    const productId = item._id || item.id;
+    if (navigation?.navigate) {
+      navigation.navigate('ProductDetail', { productId: item._id || item.id });
+    } else {
+      router.push(`/(customer)/product/${productId}` as any);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -113,7 +132,7 @@ export default function SearchScreen() {
         ) : searchResults.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Feather name="search" size={48} color="#C2B8A3" />
-            <Text style={styles.emptyTitle}>Không tìm thấy kết quả</Text>
+            <Text style={styles.emptyTitle}>Không tìm thấy sản phẩm phù hợp</Text>
             <Text style={styles.emptySub}>
               Không tìm thấy sản phẩm nào khớp với từ khóa "{query}".
             </Text>
@@ -121,30 +140,74 @@ export default function SearchScreen() {
         ) : (
           <FlatList
             data={searchResults}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item: any, idx) => String(item._id || item.id || idx)}
             contentContainerStyle={{ paddingBottom: 40 }}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                onPress={() => router.push(`/(customer)/product/${item.id}` as any)}
-                style={styles.resultCard}
-                activeOpacity={0.88}
-              >
-                <Image source={{ uri: item.image }} style={styles.resultImage} />
-                <View style={styles.resultInfo}>
-                  <Text style={styles.resultCategory}>{item.brand || item.category}</Text>
-                  <Text style={styles.resultTitle} numberOfLines={2}>
-                    {item.title}
-                  </Text>
-                  <View style={styles.ratingRow}>
-                    <Ionicons name="star" size={12} color="#C89D5C" />
-                    <Text style={styles.ratingText}>{item.rating || 4.9}</Text>
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyTitle}>
+                  Không tìm thấy sản phẩm phù hợp
+                </Text>
+              </View>
+            }
+            renderItem={({ item }: { item: any }) => {
+              // 1. Tên: item.name || item.title || 'Sản phẩm LUMORA'
+              const productName = item.name || item.title || 'Sản phẩm LUMORA';
+
+              // 2. Ảnh: Lấy an toàn item.images?.[0] || item.image || item.thumbnail || 'https://via.placeholder.com/150'
+              const rawImage =
+                item.images?.[0] ||
+                item.image ||
+                item.thumbnail ||
+                'https://via.placeholder.com/150';
+              const productImage =
+                typeof rawImage === 'string'
+                  ? rawImage
+                  : rawImage?.url || 'https://via.placeholder.com/150';
+
+              // 3. Giá: (item.price || item.originalPrice || 0).toLocaleString('vi-VN') + ' đ'
+              const rawPrice = Number(
+                item.price || item.originalPrice || item.minPrice || 0,
+              );
+              const safePrice = Number.isFinite(rawPrice) ? rawPrice : 0;
+              const formattedPrice = safePrice.toLocaleString('vi-VN') + ' đ';
+
+              // 4. Rating: item.rating || item.averageRating || 5.0
+              const productRating = item.rating || item.averageRating || 5.0;
+
+              const categoryOrBrand =
+                item.brandId?.name ||
+                item.brand ||
+                item.categoryName ||
+                item.categoryId?.name ||
+                item.category ||
+                'LUMORA';
+
+              return (
+                <TouchableOpacity
+                  onPress={() => handlePressProduct(item)}
+                  style={styles.resultCard}
+                  activeOpacity={0.88}
+                >
+                  <Image
+                    source={{ uri: productImage }}
+                    style={styles.resultImage}
+                  />
+                  <View style={styles.resultInfo}>
+                    <Text style={styles.resultCategory}>{categoryOrBrand}</Text>
+                    <Text style={styles.resultTitle} numberOfLines={2}>
+                      {productName}
+                    </Text>
+                    <View style={styles.ratingRow}>
+                      <Ionicons name="star" size={12} color="#C89D5C" />
+                      <Text style={styles.ratingText}>{productRating}</Text>
+                    </View>
+                    <Text style={styles.resultPrice}>{formattedPrice}</Text>
                   </View>
-                  <Text style={styles.resultPrice}>{formatCurrency(item.price)}</Text>
-                </View>
-                <Feather name="chevron-right" size={18} color="#C2B8A3" />
-              </TouchableOpacity>
-            )}
+                  <Feather name="chevron-right" size={18} color="#C2B8A3" />
+                </TouchableOpacity>
+              );
+            }}
           />
         )}
       </View>
@@ -178,7 +241,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Ô nhập liệu fix triệt để khoảng cách padding icon
   inputWrapper: {
     flex: 1,
     height: 44,

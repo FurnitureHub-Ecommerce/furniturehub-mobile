@@ -7,9 +7,9 @@ import {
   Modal,
   ScrollView,
   Switch,
-  SafeAreaView,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export interface FilterState {
   categoryId: string;
