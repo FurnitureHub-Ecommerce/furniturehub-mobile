@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -8,23 +8,23 @@ import {
   Platform,
   ActivityIndicator,
   RefreshControl,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
-import { getOrdersApi, OrderItem, formatCurrency } from '@/services/api';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { Feather } from "@expo/vector-icons";
+import { getOrdersApi, OrderItem, formatCurrency } from "@/services/api";
 
 const FONTS = {
-  SERIF: Platform.OS === 'ios' ? 'System' : 'sans-serif',
-  SANS: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+  SERIF: Platform.OS === "ios" ? "System" : "sans-serif",
+  SANS: Platform.OS === "ios" ? "System" : "sans-serif",
 };
 
 const ORDER_TABS = [
-  { id: 'all', label: 'Tất Cả' },
-  { id: 'pending', label: 'Chờ Xử Lý' },
-  { id: 'in_transit', label: 'Đang Giao' },
-  { id: 'delivered', label: 'Đã Giao' },
-  { id: 'cancelled', label: 'Đã Hủy' },
+  { id: "all", label: "Tất Cả" },
+  { id: "pending", label: "Chờ Xử Lý" },
+  { id: "in_transit", label: "Đang Giao" },
+  { id: "delivered", label: "Đã Giao" },
+  { id: "cancelled", label: "Đã Hủy" },
 ];
 
 export default function OrderHistoryScreen() {
@@ -32,14 +32,14 @@ export default function OrderHistoryScreen() {
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState('all');
+  const [activeTab, setActiveTab] = useState("all");
 
   const fetchOrders = async () => {
     try {
       const data = await getOrdersApi();
       setOrders(data);
     } catch (err) {
-      console.warn('Lỗi tải danh sách đơn hàng:', err);
+      console.warn("Lỗi tải danh sách đơn hàng:", err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -56,54 +56,65 @@ export default function OrderHistoryScreen() {
   };
 
   const filteredOrders = orders.filter((order) => {
-    if (activeTab === 'all') return true;
-    const status = (order.status || '').toLowerCase().trim();
-    const label = (order.statusLabel || '').toLowerCase().trim();
+    if (activeTab === "all") return true;
+    const status = (order.status || "").toLowerCase().trim();
+    const label = (order.statusLabel || "").toLowerCase().trim();
 
-    if (activeTab === 'pending') {
+    if (activeTab === "pending") {
       return (
-        status === 'pending' ||
-        status === 'chờ xử lý' ||
-        status === 'confirmed' ||
-        status === 'đã xác nhận' ||
-        status === 'processing' ||
-        status === 'đang xử lý' ||
-        status === 'packing' ||
-        status === 'đang đóng gói' ||
-        label.includes('xác nhận') ||
-        label.includes('chờ') ||
-        label.includes('xử lý')
+        status === "pending" ||
+        status === "chờ xử lý" ||
+        status === "confirmed" ||
+        status === "đã xác nhận" ||
+        status === "processing" ||
+        status === "đang xử lý" ||
+        status === "packing" ||
+        status === "đang đóng gói" ||
+        label.includes("xác nhận") ||
+        label.includes("chờ") ||
+        label.includes("xử lý")
       );
     }
-    if (activeTab === 'in_transit') {
+    if (activeTab === "in_transit") {
+      // Chỉ lấy đơn đang giao/vận chuyển, loại trừ tuyệt đối các đơn đã giao thành công
+      const isDelivered =
+        status === "delivered" ||
+        status === "completed" ||
+        status === "đã giao hàng" ||
+        status === "đã giao" ||
+        label === "đã giao" ||
+        label === "đã giao hàng";
+
+      if (isDelivered) return false;
+
       return (
-        status === 'in_transit' ||
-        status === 'shipping' ||
-        status === 'đang giao hàng' ||
-        status === 'đang vận chuyển' ||
-        status === 'đang giao' ||
-        label.includes('giao') ||
-        label.includes('vận chuyển')
+        status === "in_transit" ||
+        status === "shipping" ||
+        status === "đang giao hàng" ||
+        status === "đang vận chuyển" ||
+        status === "đang giao" ||
+        label.includes("vận chuyển") ||
+        label.includes("đang giao")
       );
     }
-    if (activeTab === 'delivered') {
+    if (activeTab === "delivered") {
       return (
-        status === 'delivered' ||
-        status === 'completed' ||
-        status === 'đã giao hàng' ||
-        status === 'đã giao' ||
-        label === 'đã giao' ||
-        label === 'đã giao hàng'
+        status === "delivered" ||
+        status === "completed" ||
+        status === "đã giao hàng" ||
+        status === "đã giao" ||
+        label === "đã giao" ||
+        label === "đã giao hàng"
       );
     }
-    if (activeTab === 'cancelled') {
+    if (activeTab === "cancelled") {
       return (
-        status === 'cancelled' ||
-        status === 'canceled' ||
-        status === 'rejected' ||
-        status === 'đã hủy' ||
-        status.includes('hủy') ||
-        label.includes('hủy')
+        status === "cancelled" ||
+        status === "canceled" ||
+        status === "rejected" ||
+        status === "đã hủy" ||
+        status.includes("hủy") ||
+        label.includes("hủy")
       );
     }
     return true;
@@ -111,60 +122,60 @@ export default function OrderHistoryScreen() {
 
   // Việt hóa và định dạng badge trạng thái 100% tiếng Việt
   const getStatusInfo = (status?: string, statusLabel?: string) => {
-    const s = (status || '').toLowerCase().trim();
-    const l = (statusLabel || '').toLowerCase().trim();
+    const s = (status || "").toLowerCase().trim();
+    const l = (statusLabel || "").toLowerCase().trim();
 
     if (
-      s === 'delivered' ||
-      s === 'completed' ||
-      s.includes('giao hàng') ||
-      s === 'đã giao' ||
-      l === 'đã giao hàng' ||
-      l === 'đã giao'
+      s === "delivered" ||
+      s === "completed" ||
+      s.includes("giao hàng") ||
+      s === "đã giao" ||
+      l === "đã giao hàng" ||
+      l === "đã giao"
     ) {
-      return { bg: '#E2F0D9', text: '#2E7D32', label: 'Đã Giao' };
+      return { bg: "#E2F0D9", text: "#2E7D32", label: "Đã Giao" };
     }
     if (
-      s === 'shipping' ||
-      s === 'in_transit' ||
-      s.includes('vận chuyển') ||
-      s.includes('đang giao') ||
-      l.includes('vận chuyển') ||
-      l.includes('đang giao')
+      s === "shipping" ||
+      s === "in_transit" ||
+      s.includes("vận chuyển") ||
+      s.includes("đang giao") ||
+      l.includes("vận chuyển") ||
+      l.includes("đang giao")
     ) {
-      return { bg: '#F5EBE1', text: '#8A6A48', label: 'Đang Giao' };
+      return { bg: "#F5EBE1", text: "#8A6A48", label: "Đang Giao" };
     }
-    if (s === 'confirmed' || s === 'đã xác nhận' || l === 'đã xác nhận') {
-      return { bg: '#E6F4EA', text: '#137333', label: 'Đã Xác Nhận' };
+    if (s === "confirmed" || s === "đã xác nhận" || l === "đã xác nhận") {
+      return { bg: "#E6F4EA", text: "#137333", label: "Đã Xác Nhận" };
     }
     if (
-      s === 'packing' ||
-      s === 'processing' ||
-      s === 'đang xử lý' ||
-      s === 'đang đóng gói' ||
-      l.includes('xử lý') ||
-      l.includes('đóng gói')
+      s === "packing" ||
+      s === "processing" ||
+      s === "đang xử lý" ||
+      s === "đang đóng gói" ||
+      l.includes("xử lý") ||
+      l.includes("đóng gói")
     ) {
-      return { bg: '#E8F0FE', text: '#1A73E8', label: 'Đang Xử Lý' };
+      return { bg: "#E8F0FE", text: "#1A73E8", label: "Đang Xử Lý" };
     }
-    if (s === 'pending' || s === 'chờ xử lý' || l === 'chờ xử lý') {
-      return { bg: '#FEF5E7', text: '#E67E22', label: 'Chờ Xử Lý' };
+    if (s === "pending" || s === "chờ xử lý" || l === "chờ xử lý") {
+      return { bg: "#FEF5E7", text: "#E67E22", label: "Chờ Xử Lý" };
     }
     if (
-      s === 'rejected' ||
-      s === 'cancelled' ||
-      s === 'canceled' ||
-      s.includes('hủy') ||
-      l.includes('hủy')
+      s === "rejected" ||
+      s === "cancelled" ||
+      s === "canceled" ||
+      s.includes("hủy") ||
+      l.includes("hủy")
     ) {
-      return { bg: '#FCE8E6', text: '#D93838', label: 'Đã Hủy' };
+      return { bg: "#FCE8E6", text: "#D93838", label: "Đã Hủy" };
     }
 
     if (statusLabel && !/^[a-zA-Z_-]+$/.test(statusLabel)) {
-      return { bg: '#E9E1D5', text: '#8A6A48', label: statusLabel };
+      return { bg: "#E9E1D5", text: "#8A6A48", label: statusLabel };
     }
 
-    return { bg: '#FEF5E7', text: '#E67E22', label: 'Đang Xử Lý' };
+    return { bg: "#FEF5E7", text: "#E67E22", label: "Đang Xử Lý" };
   };
 
   // Cắt ngắn Mã đơn hàng chỉ hiển thị 8-10 ký tự cuối gọn đẹp
@@ -173,11 +184,11 @@ export default function OrderHistoryScreen() {
     if (rawId) {
       return `#${rawId.slice(-8).toUpperCase()}`;
     }
-    return '#LUMORA';
+    return "#LUMORA";
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -187,7 +198,9 @@ export default function OrderHistoryScreen() {
         >
           <Feather name="arrow-left" size={18} color="#252525" />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, styles.headerTitleStyle]}>Lịch Sử Đơn Hàng</Text>
+        <Text style={[styles.headerTitle, styles.headerTitleStyle]}>
+          Lịch Sử Đơn Hàng
+        </Text>
         <TouchableOpacity
           onPress={onRefresh}
           style={styles.iconButton}
@@ -237,14 +250,14 @@ export default function OrderHistoryScreen() {
           <Feather name="package" size={52} color="#C2B8A3" />
           <Text style={styles.emptyTitle}>Chưa có đơn hàng nào</Text>
           <Text style={styles.emptySub}>
-            {activeTab === 'all'
-              ? 'Bạn chưa thực hiện đơn đặt hàng nào.'
+            {activeTab === "all"
+              ? "Bạn chưa thực hiện đơn đặt hàng nào."
               : `Không có đơn hàng thuộc mục "${
                   ORDER_TABS.find((t) => t.id === activeTab)?.label
                 }".`}
           </Text>
           <TouchableOpacity
-            onPress={() => router.push('/(customer)/(tabs)/shop' as any)}
+            onPress={() => router.push("/(customer)/(tabs)/shop" as any)}
             style={styles.exploreBtn}
             activeOpacity={0.88}
           >
@@ -255,14 +268,18 @@ export default function OrderHistoryScreen() {
         <FlatList
           data={filteredOrders}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 24 }}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: 14,
+            paddingBottom: 24,
+          }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
               tintColor="#8A6A48"
-              colors={['#8A6A48']}
+              colors={["#8A6A48"]}
             />
           }
           renderItem={({ item }) => {
@@ -288,13 +305,15 @@ export default function OrderHistoryScreen() {
                       { backgroundColor: statusInfo.bg },
                     ]}
                   >
-                    <Text style={[styles.statusText, { color: statusInfo.text }]}>
+                    <Text
+                      style={[styles.statusText, { color: statusInfo.text }]}
+                    >
                       {statusInfo.label}
                     </Text>
                   </View>
                 </View>
 
-                <Text style={styles.dateText}>Đặt ngày {item.date}</Text>
+                <Text style={styles.dateText}>Đặt ngày: {item.date}</Text>
 
                 {item.items && item.items.length > 0 && (
                   <Text style={styles.firstItemName} numberOfLines={1}>
@@ -315,7 +334,7 @@ export default function OrderHistoryScreen() {
                   <TouchableOpacity
                     onPress={() =>
                       router.push(
-                        `/(customer)/orders/tracking/${item.id}` as any
+                        `/(customer)/orders/tracking/${item.id}` as any,
                       )
                     }
                     style={styles.trackBtn}
@@ -339,45 +358,45 @@ export default function OrderHistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F7F4EE',
+    backgroundColor: "#F7F4EE",
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E8E2D8',
-    backgroundColor: '#F7F4EE',
+    borderBottomColor: "#E8E2D8",
+    backgroundColor: "#F7F4EE",
   },
   iconButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#EAE2D5',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#EAE2D5",
+    justifyContent: "center",
+    alignItems: "center",
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#2b221d',
+    fontWeight: "700",
+    color: "#2b221d",
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
   headerTitleStyle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#2b221d',
+    fontWeight: "700",
+    color: "#2b221d",
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
   tabBar: {
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#E8E2D8',
-    backgroundColor: '#FFFFFF',
+    borderBottomColor: "#E8E2D8",
+    backgroundColor: "#FFFFFF",
   },
   tabContent: {
     paddingHorizontal: 16,
@@ -387,47 +406,47 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: 18,
-    backgroundColor: '#F7F4EE',
+    backgroundColor: "#F7F4EE",
     borderWidth: 1,
-    borderColor: '#E8E2D8',
+    borderColor: "#E8E2D8",
   },
   tabChipActive: {
-    backgroundColor: '#8A6A48',
-    borderColor: '#8A6A48',
+    backgroundColor: "#8A6A48",
+    borderColor: "#8A6A48",
   },
   tabChipText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#7A7067',
+    fontWeight: "600",
+    color: "#7A7067",
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
   tabChipTextActive: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 30,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 13,
-    color: '#7A7067',
+    color: "#7A7067",
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 32,
   },
   emptyTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#2A2421',
+    fontWeight: "600",
+    color: "#2A2421",
     fontFamily: FONTS.SANS,
     marginTop: 16,
     marginBottom: 8,
@@ -435,52 +454,52 @@ const styles = StyleSheet.create({
   },
   emptySub: {
     fontSize: 12,
-    color: '#7A7067',
-    textAlign: 'center',
+    color: "#7A7067",
+    textAlign: "center",
     lineHeight: 18,
     marginBottom: 20,
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
   exploreBtn: {
-    backgroundColor: '#8A6A48',
+    backgroundColor: "#8A6A48",
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 20,
   },
   exploreBtnText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 1,
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
   orderCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#E8E2D8',
+    borderColor: "#E8E2D8",
     marginBottom: 12,
-    shadowColor: '#5C4A3A',
+    shadowColor: "#5C4A3A",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 5,
     elevation: 2,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 4,
     gap: 8,
   },
   orderId: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#2A2421',
+    fontWeight: "700",
+    color: "#2A2421",
     fontFamily: FONTS.SANS,
     flex: 1,
     includeFontPadding: false,
@@ -492,66 +511,66 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.5,
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
   dateText: {
     fontSize: 11,
-    color: '#7A7067',
+    color: "#7A7067",
     marginBottom: 8,
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
   firstItemName: {
     fontSize: 13,
-    fontWeight: '500',
-    color: '#2A2421',
+    fontWeight: "500",
+    color: "#2A2421",
     marginBottom: 10,
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
   cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     borderTopWidth: 1,
-    borderTopColor: '#F2ECE4',
+    borderTopColor: "#F2ECE4",
     paddingTop: 8,
     marginBottom: 8,
   },
   itemCountText: {
     fontSize: 11,
-    color: '#7A7067',
+    color: "#7A7067",
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
   totalText: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#8A6A48',
+    fontWeight: "700",
+    color: "#8A6A48",
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },
   actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F9F6F0',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F9F6F0",
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
   },
   trackBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   trackBtnText: {
     fontSize: 11,
-    fontWeight: '600',
-    color: '#8A6A48',
+    fontWeight: "600",
+    color: "#8A6A48",
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
   },

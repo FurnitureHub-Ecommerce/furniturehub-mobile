@@ -268,10 +268,10 @@ export const setDefaultAddressApi = async (
 };
 
 // ==================== PRODUCT & CATEGORY APIs ====================
-// GET /api/products - Lấy danh sách sản phẩm thực từ Backend
+// GET /api/products - Lấy danh sách sản phẩm thực từ Backend (với limit tối đa 100)
 export const getProductsApi = async () => {
   try {
-    const res = await apiRequest("/api/products");
+    const res = await apiRequest("/api/products?limit=100");
     const rawList = Array.isArray(res) ? res : res?.data || res?.products || [];
     return rawList.map((item: any) => {
       const name = item.name || item.title || "Sản phẩm LUMORA";
@@ -280,7 +280,9 @@ export const getProductsApi = async () => {
         item.image ||
         item.thumbnail ||
         "https://via.placeholder.com/150";
-      const price = Number(item.price || item.originalPrice || item.minPrice || 0);
+      const price = Number(
+        item.price || item.originalPrice || item.minPrice || 0,
+      );
       const rating = item.rating || item.averageRating || 5.0;
       return {
         ...item,
@@ -290,11 +292,17 @@ export const getProductsApi = async () => {
         title: name,
         image,
         thumbnail: image,
-        images: Array.isArray(item.images) && item.images.length > 0 ? item.images : [image],
+        images:
+          Array.isArray(item.images) && item.images.length > 0
+            ? item.images
+            : [image],
         price: Number.isFinite(price) ? price : 0,
-        originalPrice: Number(item.originalPrice || item.maxPrice || price || 0),
+        originalPrice: Number(
+          item.originalPrice || item.maxPrice || price || 0,
+        ),
         rating,
         averageRating: rating,
+        createdAt: item.createdAt || new Date().toISOString(),
       };
     });
   } catch (err) {
@@ -732,20 +740,42 @@ export const deleteVariantApi = async (
   });
 };
 
-export const formatOrderStatusVietnamese = (status?: string, rawLabel?: string): string => {
+export const formatOrderStatusVietnamese = (
+  status?: string,
+  rawLabel?: string,
+): string => {
   const s = (status || "").toLowerCase().trim();
   const l = (rawLabel || "").toLowerCase().trim();
 
-  if (s === "delivered" || s === "completed" || s.includes("giao hàng") || s === "đã giao" || l === "đã giao hàng" || l === "đã giao") {
+  if (
+    s === "delivered" ||
+    s === "completed" ||
+    s.includes("giao hàng") ||
+    s === "đã giao" ||
+    l === "đã giao hàng" ||
+    l === "đã giao"
+  ) {
     return "Đã Giao";
   }
-  if (s === "shipping" || s === "in_transit" || s.includes("vận chuyển") || s.includes("đang giao") || l.includes("vận chuyển") || l.includes("đang giao")) {
+  if (
+    s === "shipping" ||
+    s === "in_transit" ||
+    s.includes("vận chuyển") ||
+    s.includes("đang giao") ||
+    l.includes("vận chuyển") ||
+    l.includes("đang giao")
+  ) {
     return "Đang Vận Chuyển";
   }
   if (s === "confirmed" || s === "đã xác nhận" || l === "đã xác nhận") {
     return "Đã Xác Nhận";
   }
-  if (s === "packing" || s === "processing" || s === "đang xử lý" || s === "đang đóng gói") {
+  if (
+    s === "packing" ||
+    s === "processing" ||
+    s === "đang xử lý" ||
+    s === "đang đóng gói"
+  ) {
     return "Đang Xử Lý";
   }
   if (s === "pending" || s === "chờ xử lý" || l === "chờ xử lý") {
@@ -782,8 +812,10 @@ export const getOrdersApi = async (): Promise<OrderItem[]> => {
         : order.date || "Chưa xác định",
       status: order.status || "pending",
       statusLabel: formatOrderStatusVietnamese(order.status, order.statusLabel),
-      cancelReason: order.cancelReason || order.cancellationReason || order.reason,
-      cancellationReason: order.cancellationReason || order.cancelReason || order.reason,
+      cancelReason:
+        order.cancelReason || order.cancellationReason || order.reason,
+      cancellationReason:
+        order.cancellationReason || order.cancelReason || order.reason,
       total: order.totalAmount ?? order.total ?? 0,
       subtotal: order.subtotal ?? order.totalAmount ?? 0,
       shipping: order.shippingFee ?? order.shipping ?? 0,
@@ -858,8 +890,10 @@ export const getOrderDetailApi = async (id: string): Promise<OrderItem> => {
         : "Đang cập nhật",
     status: order.status || "pending",
     statusLabel: formatOrderStatusVietnamese(order.status, order.statusLabel),
-    cancelReason: order.cancelReason || order.cancellationReason || order.reason,
-    cancellationReason: order.cancellationReason || order.cancelReason || order.reason,
+    cancelReason:
+      order.cancelReason || order.cancellationReason || order.reason,
+    cancellationReason:
+      order.cancellationReason || order.cancelReason || order.reason,
     total: order.totalAmount ?? order.total ?? 0,
     subtotal:
       order.subtotal ??
@@ -877,10 +911,13 @@ export const getOrderDetailApi = async (id: string): Promise<OrderItem> => {
             order.shippingAddress.receiverName,
           phone:
             order.shippingAddress.phone || order.shippingAddress.phoneNumber,
-          street:
-            order.shippingAddress.street ||
-            order.shippingAddress.address ||
-            order.shippingAddress.detailAddress,
+          // Nối đầy đủ addressLine, ward và city từ API Address chuẩn
+          street: [
+            order.shippingAddress.addressLine || order.shippingAddress.street,
+            order.shippingAddress.ward,
+          ]
+            .filter(Boolean)
+            .join(", "),
           city:
             order.shippingAddress.city || order.shippingAddress.province || "",
         }

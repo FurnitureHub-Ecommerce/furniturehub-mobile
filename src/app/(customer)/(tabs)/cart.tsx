@@ -6,13 +6,13 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  SafeAreaView,
   StatusBar,
   Platform,
   Alert,
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useApp } from '@/context/AppContext';
 import { formatCurrency, API_BASE_URL } from '@/services/api';
@@ -172,7 +172,7 @@ export default function CartScreen() {
   const { selectedSubtotal, shipping, selectedTotal, selectedCount } = useMemo(() => {
     const selectedItems = formattedCartItems.filter((item) => selectedItemIds.has(item.itemId));
     const subtotal = selectedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const ship = selectedItems.length > 0 ? 150000 : 0;
+    const ship =  0;
     return {
       selectedSubtotal: subtotal,
       shipping: ship,
@@ -347,7 +347,9 @@ export default function CartScreen() {
 
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Phí giao hàng White-Glove</Text>
-                <Text style={styles.summaryValue}>{formatCurrency(shipping)}</Text>
+                <Text style={[styles.summaryValue, shipping === 0 && { color: '#8A6A48', fontWeight: '700' }]}>
+                  {shipping === 0 ? 'Miễn phí vận chuyển' : formatCurrency(shipping)}
+                </Text>
               </View>
 
               <View style={[styles.summaryRow, styles.totalRow]}>
@@ -471,7 +473,7 @@ const styles = StyleSheet.create({
   summaryTitle: { fontSize: 11, fontWeight: '700', color: '#8A6A48', letterSpacing: 1, marginBottom: 12 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   summaryLabel: { fontSize: 13, color: '#6E6860' },
-  summaryValue: { fontSize: 13, fontWeight: '600', color: '#252525' },
+  summaryValue: { fontSize: 13, fontWeight: '600', color: '#070707' },
   totalRow: { borderTopWidth: 1, borderTopColor: '#E2DBD0', paddingTop: 12, marginTop: 4 },
   totalLabel: { fontSize: 14, fontWeight: '700', color: '#252525' },
   totalValue: { fontSize: 17, fontWeight: '700', color: '#763e02' },

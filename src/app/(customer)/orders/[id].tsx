@@ -11,11 +11,12 @@ import {
   Modal,
   TextInput,
   KeyboardAvoidingView,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { getOrderDetailApi, cancelOrderApi, OrderItem, formatCurrency } from '@/services/api';
+import { getOrderDetailApi, cancelOrderApi, OrderItem, formatCurrency, getProductsApi  } from '@/services/api';
 
 const FONTS = {
   SERIF: Platform.OS === 'ios' ? 'System' : 'sans-serif',
@@ -43,7 +44,7 @@ export default function OrderDetailScreen() {
   const [customReason, setCustomReason] = useState<string>('');
 
   useEffect(() => {
-    const fetchOrder = async () => {
+    const fetchOrderAndProducts = async () => {
       if (!targetId) {
         setErrorMsg('Mã đơn hàng không hợp lệ');
         setLoading(false);
@@ -52,8 +53,37 @@ export default function OrderDetailScreen() {
       try {
         setLoading(true);
         setErrorMsg(null);
-        const data = await getOrderDetailApi(targetId);
-        setOrder(data);
+
+        // Gọi đồng thời API lấy chi tiết đơn hàng và API danh sách sản phẩm thật
+        const [orderData, productsList] = await Promise.all([
+          getOrderDetailApi(targetId),
+          getProductsApi(),
+        ]);
+
+        // Dùng danh sách sản phẩm thật để map và bổ sung/ghi đè hình ảnh chuẩn từ kho sản phẩm nếu item thiếu ảnh
+        if (orderData && Array.isArray(orderData.items)) {
+          orderData.items = orderData.items.map((orderItem: any) => {
+            const matchedProduct = productsList.find(
+              (p: any) =>
+                String(p._id || p.id) === String(orderItem.productId || orderItem.id) ||
+                p.name?.toLowerCase() === orderItem.title?.toLowerCase()
+            );
+
+            const realImage =
+              matchedProduct?.image ||
+              (Array.isArray(matchedProduct?.images) && matchedProduct.images.length > 0
+                ? matchedProduct.images[0]
+                : null) ||
+              orderItem.image;
+
+            return {
+              ...orderItem,
+              image: realImage,
+            };
+          });
+        }
+
+        setOrder(orderData);
       } catch (err: any) {
         console.warn('Lỗi lấy API chi tiết đơn hàng:', err);
         setErrorMsg(err.message || 'Không thể lấy dữ liệu đơn hàng từ máy chủ');
@@ -62,7 +92,7 @@ export default function OrderDetailScreen() {
       }
     };
 
-    fetchOrder();
+    fetchOrderAndProducts();
   }, [targetId]);
 
   const isPending =
@@ -177,7 +207,7 @@ export default function OrderDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, styles.center]} edges={['top']}>
         <ActivityIndicator size="large" color="#8A6A48" />
-        <Text style={styles.loadingText}>Đang lấy chi tiết đơn hàng từ Server...</Text>
+        <Text style={styles.loadingText}>Đang lấy chi tiết đơn hàng...</Text>
       </SafeAreaView>
     );
   }
@@ -280,9 +310,19 @@ export default function OrderDetailScreen() {
         {order.items.map((item, idx) => (
           <View key={item.id || idx} style={styles.itemCard}>
             {/* Box Icon thay thế thẻ Image */}
-            <View style={styles.packageIconBox}>
+            {/* <View style={styles.packageIconBox}>
               <Feather name="package" size={24} color="#8A6A48" />
-            </View>
+            </View> */}
+            <Image
+              source={{
+                uri:
+                  item.image && item.image.trim().length > 0
+                    ? item.image
+                    : 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?q=80&w=600',
+              }}
+              style={styles.productItemImage}
+              resizeMode="cover"
+            />
 
             <View style={styles.itemInfo}>
               <Text style={styles.itemTitle} numberOfLines={2}>
@@ -975,5 +1015,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: FONTS.SANS,
     includeFontPadding: false,
+  },
+  productItemImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 10,
+    backgroundColor: '#EAE2D5',
+    borderWidth: 1,
+    borderColor: '#E8E2D8',
   },
 });
