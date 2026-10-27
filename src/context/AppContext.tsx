@@ -98,7 +98,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     }, 0);
   }, [cart]);
 
-  const shipping = cart.length > 0 ? 150000 : 0;
+  const shipping = 0;
   const total = subtotal + shipping;
 
 // Thêm vào giỏ hàng - Gọi 100% API Real Backend (Không Mock Data / Không Giả Lập)

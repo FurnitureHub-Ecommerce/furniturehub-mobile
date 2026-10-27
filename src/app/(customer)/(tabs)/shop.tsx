@@ -6,9 +6,9 @@ import {
   TouchableOpacity,
   TextInput,
   FlatList,
-  SafeAreaView,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";

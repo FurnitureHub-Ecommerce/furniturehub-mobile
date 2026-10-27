@@ -239,7 +239,7 @@ export default function CheckoutScreen() {
             <Text style={styles.deliveryTitle}>Vận Chuyển Cao Cấp White-Glove</Text>
             <Text style={styles.deliveryDesc}>Bao gồm vận chuyển chuyên dụng, hỗ trợ dỡ hộp & lắp đặt</Text>
           </View>
-          <Text style={styles.deliveryFee}>{formatCurrency(shipping)}</Text>
+          <Text style={styles.deliveryFee}>Miễn phí</Text>
         </View>
 
         {/* Tóm Tắt Đơn Hàng */}
@@ -251,7 +251,7 @@ export default function CheckoutScreen() {
           </View>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Phí giao hàng White-Glove</Text>
-            <Text style={styles.summaryVal}>{formatCurrency(shipping)}</Text>
+            <Text style={styles.summaryVal}>Miễn phí</Text>
           </View>
           <View style={styles.dividerLine} />
           <View style={styles.summaryRow}>

@@ -474,7 +474,7 @@ export const styles = StyleSheet.create({
   },
  originalPrice: {
     fontSize: 10,
-    fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
+    fontFamily: Platform.OS === "ios" ? "serif" : "serif",
     color: COLORS.TEXT_MUTED,
     textDecorationLine: "line-through",
     includeFontPadding: false,
