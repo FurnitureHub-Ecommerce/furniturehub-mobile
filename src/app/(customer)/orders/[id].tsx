@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,11 +12,21 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Image,
+  RefreshControl,
+  Clipboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { getOrderDetailApi, cancelOrderApi, OrderItem, formatCurrency, getProductsApi  } from '@/services/api';
+import {
+  apiRequest,
+  getOrderDetailApi,
+  getOrderTrackingApi,
+  cancelOrderApi,
+  OrderItem,
+  formatCurrency,
+  getProductsApi,
+} from '@/services/api';
 
 const FONTS = {
   SERIF: Platform.OS === 'ios' ? 'System' : 'sans-serif',
@@ -30,44 +40,322 @@ const CANCEL_REASONS = [
   'Lý do khác',
 ];
 
+// Quét lý do hủy / từ chối từ nhiều nguồn dữ liệu của Order & Tracking
+const extractCancelOrRejectReason = (
+  orderObj?: any,
+  trackingObj?: any,
+  localReason?: string
+): string => {
+  const candidates: string[] = [];
+
+  if (localReason && typeof localReason === 'string' && localReason.trim()) {
+    candidates.push(localReason.trim());
+  }
+
+  // 1. Quét mảng tiến trình: timeline, statusHistory, orderStatusHistory (ở bước CANCELLED hoặc REJECTED)
+  const historyArrays = [
+    orderObj?.timeline,
+    orderObj?.statusHistory,
+    orderObj?.orderStatusHistory,
+    orderObj?.history,
+    orderObj?.trackingTimeline,
+    trackingObj?.timeline,
+    trackingObj?.statusHistory,
+    trackingObj?.orderStatusHistory,
+    trackingObj?.history,
+    trackingObj?.steps,
+  ];
+
+  for (const arr of historyArrays) {
+    if (Array.isArray(arr) && arr.length > 0) {
+      const reversed = [...arr].reverse();
+      for (const step of reversed) {
+        if (!step || typeof step !== 'object') continue;
+        const stepStatus = String(
+          step.status ||
+            step.state ||
+            step.toStatus ||
+            step.newStatus ||
+            step.stepStatus ||
+            step.title ||
+            ''
+        )
+          .toUpperCase()
+          .trim();
+
+        const isCancelOrRejectStep =
+          stepStatus === 'CANCELLED' ||
+          stepStatus === 'CANCELED' ||
+          stepStatus === 'REJECTED' ||
+          stepStatus.includes('CANCEL') ||
+          stepStatus.includes('REJECT') ||
+          stepStatus.includes('HỦY') ||
+          stepStatus.includes('TỪ CHỐI');
+
+        if (isCancelOrRejectStep) {
+          const stepFields = [
+            step.rejectReason,
+            step.rejectedReason,
+            step.rejectionReason,
+            step.cancelReason,
+            step.cancellationReason,
+            step.reason,
+            step.note,
+            step.notes,
+            step.comment,
+            step.message,
+            step.description,
+          ];
+          for (const sf of stepFields) {
+            if (typeof sf === 'string' && sf.trim().length > 0) {
+              candidates.push(sf.trim());
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Kết hợp các trường trực tiếp trên order và tracking
+  const directFields = [
+    orderObj?.rejectReason,
+    orderObj?.rejectedReason,
+    orderObj?.rejectionReason,
+    orderObj?.cancelReason,
+    orderObj?.cancellationReason,
+    orderObj?.canceledReason,
+    orderObj?.reason,
+    orderObj?.statusReason,
+    orderObj?.adminNote,
+    orderObj?.staffNote,
+    orderObj?.note,
+    trackingObj?.rejectReason,
+    trackingObj?.rejectedReason,
+    trackingObj?.rejectionReason,
+    trackingObj?.cancelReason,
+    trackingObj?.cancellationReason,
+    trackingObj?.canceledReason,
+    trackingObj?.reason,
+    trackingObj?.statusReason,
+    trackingObj?.note,
+  ];
+
+  for (const field of directFields) {
+    if (typeof field === 'string' && field.trim().length > 0) {
+      candidates.push(field.trim());
+    }
+  }
+
+  const genericPlaceholders = [
+    'đã xác nhận hủy giao dịch',
+    'người mua yêu cầu hủy',
+    'khách hàng yêu cầu hủy',
+    'hết hàng hoặc thông tin không hợp lệ',
+    'đơn hàng đã bị hủy',
+    'đơn hàng bị từ chối',
+  ];
+
+  const cleanPrefix = (raw: string) => {
+    // Chỉ loại bỏ tiền tố "Lý do:" nếu chuỗi đã có sẵn để tránh lặp "Lý do: Lý do: ..."
+    // Tuyệt đối không dùng slice hoặc substring làm cụt chữ
+    return raw.replace(/^lý\s*do\s*(hủy|từ\s*chối)?\s*:\s*/i, '').trim();
+  };
+
+  for (const item of candidates) {
+    const cleaned = cleanPrefix(item);
+    if (
+      cleaned.length > 0 &&
+      !genericPlaceholders.includes(cleaned.toLowerCase())
+    ) {
+      return cleaned;
+    }
+  }
+
+  if (candidates.length > 0) {
+    const fallbackCleaned = cleanPrefix(candidates[0]);
+    if (fallbackCleaned.length > 0) return fallbackCleaned;
+  }
+
+  return '';
+};
+
+// Kiểm tra đơn hàng có phải bị từ chối bởi Staff / Cửa hàng hay không
+const checkIsRejectedByStaff = (orderObj?: any, trackingObj?: any): boolean => {
+  const s = String(trackingObj?.status || orderObj?.status || '')
+    .toLowerCase()
+    .trim();
+  const l = String(orderObj?.statusLabel || '')
+    .toLowerCase()
+    .trim();
+
+  if (
+    s === 'rejected' ||
+    s.includes('reject') ||
+    s.includes('từ chối') ||
+    l.includes('từ chối')
+  ) {
+    return true;
+  }
+
+  if (
+    orderObj?.rejectReason ||
+    orderObj?.rejectedReason ||
+    orderObj?.rejectionReason ||
+    trackingObj?.rejectReason ||
+    trackingObj?.rejectedReason ||
+    trackingObj?.rejectionReason
+  ) {
+    return true;
+  }
+
+  const actor = String(
+    orderObj?.cancelledBy ||
+      orderObj?.canceledBy ||
+      orderObj?.rejectedBy ||
+      orderObj?.updatedByRole ||
+      trackingObj?.cancelledBy ||
+      trackingObj?.rejectedBy ||
+      ''
+  )
+    .toUpperCase()
+    .trim();
+
+  if (
+    actor === 'STAFF' ||
+    actor === 'ADMIN' ||
+    actor === 'STORE' ||
+    actor === 'SHOP' ||
+    actor === 'MANAGER'
+  ) {
+    return true;
+  }
+
+  const historyArrays = [
+    orderObj?.timeline,
+    orderObj?.statusHistory,
+    orderObj?.orderStatusHistory,
+    orderObj?.history,
+    trackingObj?.timeline,
+    trackingObj?.statusHistory,
+    trackingObj?.orderStatusHistory,
+    trackingObj?.history,
+    trackingObj?.steps,
+  ];
+
+  for (const arr of historyArrays) {
+    if (Array.isArray(arr)) {
+      for (const step of arr) {
+        if (!step || typeof step !== 'object') continue;
+        const stepStatus = String(
+          step.status || step.state || step.toStatus || step.newStatus || ''
+        )
+          .toUpperCase()
+          .trim();
+
+        if (
+          stepStatus === 'REJECTED' ||
+          stepStatus.includes('REJECT') ||
+          stepStatus.includes('TỪ CHỐI')
+        ) {
+          return true;
+        }
+        if (step.rejectReason || step.rejectedReason || step.rejectionReason) {
+          return true;
+        }
+        const stepActor = String(
+          step.updatedByRole ||
+            step.role ||
+            step.actor ||
+            step.cancelledBy ||
+            step.rejectedBy ||
+            step.performerRole ||
+            ''
+        )
+          .toUpperCase()
+          .trim();
+        if (
+          (stepStatus.includes('CANCEL') || stepStatus.includes('HỦY')) &&
+          (stepActor === 'STAFF' ||
+            stepActor === 'ADMIN' ||
+            stepActor === 'STORE' ||
+            stepActor === 'SHOP')
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+};
+
 export default function OrderDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const targetId = (params.id || params.orderId) as string;
 
-  const [order, setOrder] = useState<OrderItem | null>(null);
+  const [order, setOrder] = useState<(OrderItem & Record<string, any>) | null>(null);
+  const [trackingData, setTrackingData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [selectedReason, setSelectedReason] = useState<string>('Đổi ý không mua nữa');
   const [customReason, setCustomReason] = useState<string>('');
+  const [localCancelReason, setLocalCancelReason] = useState<string>('');
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    const fetchOrderAndProducts = async () => {
+  const hasLoadedRef = useRef(false);
+
+  const fetchOrderAndProducts = useCallback(
+    async (options?: { silent?: boolean; isRefresh?: boolean }) => {
+      const silent = options?.silent ?? false;
+      const isRefresh = options?.isRefresh ?? false;
+
       if (!targetId) {
-        setErrorMsg('Mã đơn hàng không hợp lệ');
-        setLoading(false);
+        if (!silent) {
+          setErrorMsg('Mã đơn hàng không hợp lệ');
+          setLoading(false);
+        }
         return;
       }
-      try {
-        setLoading(true);
-        setErrorMsg(null);
 
-        // Gọi đồng thời API lấy chi tiết đơn hàng và API danh sách sản phẩm thật
-        const [orderData, productsList] = await Promise.all([
+      try {
+        if (isRefresh) {
+          setRefreshing(true);
+        } else if (!silent) {
+          setLoading(true);
+        }
+        if (!silent) {
+          setErrorMsg(null);
+        }
+
+        // Gọi đồng thời API chi tiết đơn hàng, raw order payload, tracking và danh sách sản phẩm
+        const [orderData, rawOrderRes, trackingRes, productsList] = await Promise.all([
           getOrderDetailApi(targetId),
-          getProductsApi(),
+          apiRequest(`/api/orders/${targetId}`).catch(() => null),
+          getOrderTrackingApi(targetId).catch(() => null),
+          getProductsApi().catch(() => []),
         ]);
+
+        const rawOrderObj =
+          rawOrderRes?.data?.order ||
+          rawOrderRes?.data ||
+          rawOrderRes?.order ||
+          rawOrderRes ||
+          {};
 
         // Dùng danh sách sản phẩm thật để map và bổ sung/ghi đè hình ảnh chuẩn từ kho sản phẩm nếu item thiếu ảnh
         if (orderData && Array.isArray(orderData.items)) {
           orderData.items = orderData.items.map((orderItem: any) => {
-            const matchedProduct = productsList.find(
-              (p: any) =>
-                String(p._id || p.id) === String(orderItem.productId || orderItem.id) ||
-                p.name?.toLowerCase() === orderItem.title?.toLowerCase()
-            );
+            const matchedProduct = Array.isArray(productsList)
+              ? productsList.find(
+                  (p: any) =>
+                    String(p._id || p.id) === String(orderItem.productId || orderItem.id) ||
+                    p.name?.toLowerCase() === orderItem.title?.toLowerCase()
+                )
+              : null;
 
             const realImage =
               matchedProduct?.image ||
@@ -83,29 +371,149 @@ export default function OrderDetailScreen() {
           });
         }
 
-        setOrder(orderData);
+        const mergedOrder = {
+          ...rawOrderObj,
+          ...orderData,
+          _id: rawOrderObj?._id || orderData?._id || orderData?.id,
+          id: orderData?.id || rawOrderObj?._id || rawOrderObj?.id,
+          timeline:
+            rawOrderObj?.timeline ||
+            rawOrderObj?.statusHistory ||
+            rawOrderObj?.orderStatusHistory ||
+            trackingRes?.timeline ||
+            trackingRes?.statusHistory ||
+            trackingRes?.orderStatusHistory,
+          statusHistory:
+            rawOrderObj?.statusHistory ||
+            rawOrderObj?.orderStatusHistory ||
+            trackingRes?.statusHistory,
+          orderStatusHistory:
+            rawOrderObj?.orderStatusHistory ||
+            rawOrderObj?.statusHistory ||
+            trackingRes?.orderStatusHistory,
+          rejectReason:
+            rawOrderObj?.rejectReason ||
+            rawOrderObj?.rejectedReason ||
+            rawOrderObj?.rejectionReason ||
+            trackingRes?.rejectReason ||
+            trackingRes?.rejectedReason,
+          rejectedReason:
+            rawOrderObj?.rejectedReason ||
+            rawOrderObj?.rejectReason ||
+            trackingRes?.rejectedReason,
+          cancelReason:
+            rawOrderObj?.cancelReason ||
+            rawOrderObj?.cancellationReason ||
+            orderData?.cancelReason ||
+            trackingRes?.cancelReason,
+          reason:
+            rawOrderObj?.reason ||
+            trackingRes?.reason ||
+            orderData?.cancelReason,
+        };
+
+        setOrder(mergedOrder);
+        if (trackingRes) {
+          setTrackingData(trackingRes);
+        }
+        hasLoadedRef.current = true;
+        setErrorMsg(null);
       } catch (err: any) {
         console.warn('Lỗi lấy API chi tiết đơn hàng:', err);
-        setErrorMsg(err.message || 'Không thể lấy dữ liệu đơn hàng từ máy chủ');
+        if (!silent) {
+          setErrorMsg(err.message || 'Không thể lấy dữ liệu đơn hàng từ máy chủ');
+        }
       } finally {
-        setLoading(false);
+        if (isRefresh) {
+          setRefreshing(false);
+        }
+        if (!silent) {
+          setLoading(false);
+        }
       }
-    };
+    },
+    [targetId]
+  );
 
-    fetchOrderAndProducts();
-  }, [targetId]);
+  // Tự động fetch lại API chi tiết đơn hàng mỗi khi màn hình được active
+  useFocusEffect(
+    useCallback(() => {
+      fetchOrderAndProducts({ silent: hasLoadedRef.current });
+    }, [fetchOrderAndProducts])
+  );
+
+  const onRefresh = useCallback(() => {
+    fetchOrderAndProducts({ silent: true, isRefresh: true });
+  }, [fetchOrderAndProducts]);
+
+  // Đồng bộ mã đơn hàng: lấy 8 ký tự cuối viết hoa từ _id
+  const rawOrderId = order?._id || order?.id || '';
+  const orderCode = rawOrderId ? `#${String(rawOrderId).slice(-8).toUpperCase()}` : '';
+
+  const handleCopyOrderCode = async () => {
+    if (!orderCode) return;
+    try {
+      if (
+        typeof navigator !== 'undefined' &&
+        navigator.clipboard &&
+        typeof navigator.clipboard.writeText === 'function'
+      ) {
+        await navigator.clipboard.writeText(orderCode);
+      } else if (Clipboard && typeof Clipboard.setString === 'function') {
+        Clipboard.setString(orderCode);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      if (Platform.OS !== 'web') {
+        Alert.alert('Đã sao chép', `Đã sao chép mã đơn hàng ${orderCode}`);
+      }
+    } catch (err) {
+      console.warn('Không thể sao chép mã đơn hàng:', err);
+    }
+  };
 
   const isPending =
     order?.status?.toLowerCase() === 'pending' ||
     order?.status?.toLowerCase() === 'chờ xử lý' ||
     order?.status?.toLowerCase() === 'processing';
 
+  const isRejectedByStaff = checkIsRejectedByStaff(order, trackingData);
+
   const isCancelled =
+    isRejectedByStaff ||
     order?.status?.toLowerCase() === 'cancelled' ||
     order?.status?.toLowerCase() === 'canceled' ||
     order?.status?.toLowerCase() === 'rejected' ||
     order?.status?.toLowerCase() === 'đã hủy' ||
-    order?.statusLabel?.toLowerCase() === 'đã hủy';
+    order?.status?.toLowerCase().includes('hủy') ||
+    order?.status?.toLowerCase().includes('từ chối') ||
+    order?.statusLabel?.toLowerCase() === 'đã hủy' ||
+    order?.statusLabel?.toLowerCase().includes('từ chối');
+
+  const isCompleted =
+    order?.status?.toLowerCase() === 'delivered' ||
+    order?.status?.toLowerCase() === 'completed' ||
+    order?.status?.toLowerCase() === 'đã giao hàng' ||
+    order?.status?.toLowerCase() === 'đã giao' ||
+    order?.statusLabel?.toLowerCase() === 'đã giao hàng' ||
+    order?.statusLabel?.toLowerCase() === 'đã giao';
+
+  const cancelOrRejectReason = extractCancelOrRejectReason(
+    order,
+    trackingData,
+    localCancelReason
+  );
+
+  // Nếu trạng thái đơn chưa hoàn thành/hủy, thêm polling nhẹ mỗi 12 giây để tự động đồng bộ khi Staff đổi trạng thái
+  useEffect(() => {
+    if (!targetId || !order || isCompleted || isCancelled) return;
+
+    const intervalId = setInterval(() => {
+      fetchOrderAndProducts({ silent: true });
+    }, 12000);
+
+    return () => clearInterval(intervalId);
+  }, [targetId, order?.status, isCompleted, isCancelled, fetchOrderAndProducts]);
 
   const handleConfirmCancel = async () => {
     let finalReason = selectedReason;
@@ -124,8 +532,10 @@ export default function OrderDetailScreen() {
 
     try {
       setCancelling(true);
-      const targetOrderId = order?.id || targetId || '';
+      const targetOrderId = order?._id || order?.id || targetId || '';
       await cancelOrderApi(targetOrderId, { reason: finalReason });
+
+      setLocalCancelReason(finalReason);
 
       if (order) {
         setOrder({
@@ -134,6 +544,7 @@ export default function OrderDetailScreen() {
           statusLabel: 'Đã Hủy',
           cancelReason: finalReason,
           cancellationReason: finalReason,
+          reason: finalReason,
         });
       }
 
@@ -149,6 +560,14 @@ export default function OrderDetailScreen() {
   const getStatusInfo = (status?: string, statusLabel?: string) => {
     const s = (status || '').toLowerCase().trim();
     const l = (statusLabel || '').toLowerCase().trim();
+
+    if (isRejectedByStaff) {
+      return {
+        bg: '#FEF2F2',
+        text: '#DC2626',
+        label: 'Đơn hàng bị từ chối bởi Cửa hàng',
+      };
+    }
 
     if (
       s === 'delivered' ||
@@ -193,7 +612,7 @@ export default function OrderDetailScreen() {
       s.includes('hủy') ||
       l.includes('hủy')
     ) {
-      return { bg: '#FCE8E6', text: '#D93838', label: 'Đã Hủy' };
+      return { bg: '#FEF2F2', text: '#DC2626', label: 'Đã Hủy' };
     }
 
     if (statusLabel && !/^[a-zA-Z_-]+$/.test(statusLabel)) {
@@ -238,7 +657,7 @@ export default function OrderDetailScreen() {
           <Feather name="arrow-left" size={18} color="#252525" />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, styles.headerTitleStyle]}>
-          Chi Tiết Đơn #{order.id ? order.id.slice(-8).toUpperCase() : ''}
+          Chi Tiết Đơn {orderCode}
         </Text>
         <TouchableOpacity
           onPress={() => router.push(`/(customer)/orders/tracking/${order.id}` as any)}
@@ -249,44 +668,98 @@ export default function OrderDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#8A6A48"
+            colors={['#8A6A48']}
+          />
+        }
+      >
         {/* Status Card */}
         <View style={styles.statusCard}>
-          <View style={styles.statusRow}>
-            <View
-              style={[
-                styles.statusIndicator,
-                { backgroundColor: statusInfo.text },
-              ]}
-            />
-            <Text
-              style={[
-                styles.statusTitle,
-                { color: statusInfo.text },
-              ]}
-            >
-              {statusInfo.label}
-            </Text>
+          <View style={styles.statusHeaderRow}>
+            <View style={styles.statusRow}>
+              <View
+                style={[
+                  styles.statusIndicator,
+                  { backgroundColor: statusInfo.text },
+                ]}
+              />
+              <Text
+                style={[
+                  styles.statusTitle,
+                  { color: statusInfo.text },
+                ]}
+              >
+                {statusInfo.label}
+              </Text>
+            </View>
+
+            {/* Mã đơn hàng & Nút sao chép */}
+            {orderCode ? (
+              <View style={styles.orderCodeRow}>
+                <Text style={styles.orderCodeText}>{orderCode}</Text>
+                <TouchableOpacity
+                  onPress={handleCopyOrderCode}
+                  style={styles.copyCodeBtn}
+                  activeOpacity={0.75}
+                >
+                  <Feather
+                    name={copied ? 'check' : 'copy'}
+                    size={12}
+                    color={copied ? '#2E7D32' : '#8A6A48'}
+                  />
+                  <Text
+                    style={[
+                      styles.copyCodeBtnText,
+                      copied && { color: '#2E7D32' },
+                    ]}
+                  >
+                    {copied ? 'Đã chép' : 'Sao chép'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </View>
+
           <Text style={styles.orderDate}>Ngày đặt đơn: {order.date}</Text>
 
+          {/* Khối hiển thị lý do hủy / từ chối màu nền đỏ nhạt (#FEF2F2) */}
           {isCancelled && (
-            <Text style={styles.cancelReasonText}>
-              Lý do: {order.cancelReason || order.cancellationReason || 'Người mua yêu cầu hủy'}
-            </Text>
+            <View style={styles.cancelReasonBox}>
+              <View style={styles.cancelReasonHeader}>
+                <Feather name="alert-circle" size={15} color="#DC2626" />
+                <Text style={styles.cancelReasonTitle}>
+                  {isRejectedByStaff
+                    ? 'Đơn hàng bị từ chối bởi Cửa hàng'
+                    : 'Đơn hàng đã bị hủy'}
+                </Text>
+              </View>
+              <Text style={styles.cancelReasonText}>
+                {`Lý do: ${
+                  cancelOrRejectReason ||
+                  (isRejectedByStaff
+                    ? 'Cửa hàng từ chối tiếp nhận đơn hàng'
+                    : 'Người mua yêu cầu hủy đơn hàng')
+                }`}
+              </Text>
+            </View>
           )}
 
-          {order.status !== 'cancelled' && order.status !== 'rejected' && (
-            <TouchableOpacity
-              onPress={() => router.push(`/(customer)/orders/tracking/${order.id}` as any)}
-              style={styles.trackOrderBtn}
-              activeOpacity={0.8}
-            >
-              <Feather name="map-pin" size={13} color="#8A6A48" />
-              <Text style={styles.trackOrderBtnText}>Theo Dõi Lộ Trình Vận Chuyển</Text>
-              <Feather name="chevron-right" size={14} color="#8A6A48" />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            onPress={() => router.push(`/(customer)/orders/tracking/${order.id}` as any)}
+            style={styles.trackOrderBtn}
+            activeOpacity={0.8}
+          >
+            <Feather name="map-pin" size={13} color="#8A6A48" />
+            <Text style={styles.trackOrderBtnText}>Theo Dõi Lộ Trình Vận Chuyển</Text>
+            <Feather name="chevron-right" size={14} color="#8A6A48" />
+          </TouchableOpacity>
         </View>
 
         {/* Shipping Address */}
@@ -297,10 +770,12 @@ export default function OrderDetailScreen() {
               <Text style={styles.sectionHeaderTitle}>ĐỊA CHỈ NHẬN HÀNG</Text>
             </View>
             <Text style={styles.addressName}>
-              {order.shippingAddress.fullName || 'Người nhận'} {order.shippingAddress.phone ? `• ${order.shippingAddress.phone}` : ''}
+              {order.shippingAddress.fullName || 'Người nhận'}{' '}
+              {order.shippingAddress.phone ? `• ${order.shippingAddress.phone}` : ''}
             </Text>
             <Text style={styles.addressStreet}>
-              {order.shippingAddress.street} {order.shippingAddress.city ? `, ${order.shippingAddress.city}` : ''}
+              {order.shippingAddress.street}{' '}
+              {order.shippingAddress.city ? `, ${order.shippingAddress.city}` : ''}
             </Text>
           </View>
         )}
@@ -309,10 +784,6 @@ export default function OrderDetailScreen() {
         <Text style={styles.sectionTag}>SẢN PHẨM ĐÃ ĐẶT ({order.items.length})</Text>
         {order.items.map((item, idx) => (
           <View key={item.id || idx} style={styles.itemCard}>
-            {/* Box Icon thay thế thẻ Image */}
-            {/* <View style={styles.packageIconBox}>
-              <Feather name="package" size={24} color="#8A6A48" />
-            </View> */}
             <Image
               source={{
                 uri:
@@ -336,7 +807,7 @@ export default function OrderDetailScreen() {
                 <Text style={styles.itemPrice}>{formatCurrency(item.price)}</Text>
               </View>
 
-              {order.status === 'delivered' && (
+              {isCompleted && (
                 <TouchableOpacity
                   onPress={() =>
                     router.push(
@@ -360,6 +831,10 @@ export default function OrderDetailScreen() {
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>CHI TIẾT THANH TOÁN</Text>
           <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Mã đơn hàng</Text>
+            <Text style={styles.summaryValue}>{orderCode}</Text>
+          </View>
+          <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Tạm tính tiền hàng</Text>
             <Text style={styles.summaryValue}>{formatCurrency(order.subtotal)}</Text>
           </View>
@@ -378,7 +853,7 @@ export default function OrderDetailScreen() {
         </View>
 
         {/* Nút hủy đơn hàng */}
-        {isPending && (
+        {isPending && !isCancelled && (
           <TouchableOpacity
             onPress={() => {
               setSelectedReason('Đổi ý không mua nữa');
@@ -524,7 +999,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#7A7067',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   emptyTitle: {
     fontSize: 14,
@@ -533,7 +1007,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 16,
     textAlign: 'center',
-    includeFontPadding: false,
   },
   backBtn: {
     backgroundColor: '#8A6A48',
@@ -546,7 +1019,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   header: {
     flexDirection: 'row',
@@ -571,14 +1043,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#2b221d',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   headerTitleStyle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#2b221d',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   scrollContent: {
     padding: 16,
@@ -597,11 +1067,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
   },
+  statusHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
+    flexShrink: 1,
   },
   statusIndicator: {
     width: 8,
@@ -609,17 +1087,78 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   statusTitle: {
-    fontSize: 15,
+    fontSize: 14.5,
+    lineHeight: 20,
     fontWeight: '700',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
+    flexShrink: 1,
+  },
+  orderCodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  orderCodeText: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    fontWeight: '700',
+    color: '#2A2421',
+    fontFamily: FONTS.SANS,
+  },
+  copyCodeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FAF7F2',
+    borderWidth: 1,
+    borderColor: '#E8E2D8',
+    borderRadius: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 7,
+  },
+  copyCodeBtnText: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: '#8A6A48',
+    fontFamily: FONTS.SANS,
   },
   orderDate: {
-    fontSize: 11,
+    fontSize: 11.5,
+    lineHeight: 18,
     color: '#7A7067',
+    marginTop: 4,
     marginBottom: 8,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
+  },
+  cancelReasonBox: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    padding: 12,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  cancelReasonHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  cancelReasonTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+    color: '#991B1B',
+    fontFamily: FONTS.SANS,
+    flex: 1,
+  },
+  cancelReasonText: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: '#DC2626',
+    fontWeight: '500',
+    fontFamily: FONTS.SANS,
   },
   trackOrderBtn: {
     flexDirection: 'row',
@@ -639,7 +1178,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#8A6A48',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   sectionCard: {
     backgroundColor: '#FFFFFF',
@@ -666,7 +1204,6 @@ const styles = StyleSheet.create({
     color: '#8A6A48',
     letterSpacing: 1.2,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   addressName: {
     fontSize: 12.5,
@@ -674,14 +1211,12 @@ const styles = StyleSheet.create({
     color: '#2A2421',
     marginBottom: 2,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   addressStreet: {
     fontSize: 11.5,
     color: '#7A7067',
     lineHeight: 17,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   sectionTag: {
     fontSize: 10.5,
@@ -690,7 +1225,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     marginBottom: 10,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   itemCard: {
     flexDirection: 'row',
@@ -728,14 +1262,12 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginBottom: 2,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   itemVariant: {
     fontSize: 10.5,
     color: '#7A7067',
     marginBottom: 2,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   priceRow: {
     flexDirection: 'row',
@@ -748,14 +1280,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#7A7067',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   itemPrice: {
     fontSize: 13,
     fontWeight: '700',
     color: '#8A6A48',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   reviewItemBtn: {
     flexDirection: 'row',
@@ -775,7 +1305,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#8A6A48',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   summaryCard: {
     backgroundColor: '#FFFFFF',
@@ -798,7 +1327,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     marginBottom: 10,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -809,21 +1337,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#7A7067',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   summaryValue: {
     fontSize: 12,
     fontWeight: '600',
     color: '#2A2421',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   paymentMethodVal: {
     fontSize: 11.5,
     fontWeight: '500',
     color: '#2A2421',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   totalRow: {
     borderTopWidth: 1,
@@ -836,14 +1361,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#2A2421',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   totalValue: {
     fontSize: 16,
     fontWeight: '700',
     color: '#8A6A48',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   cancelBtn: {
     flexDirection: 'row',
@@ -863,15 +1386,6 @@ const styles = StyleSheet.create({
     color: '#D93838',
     letterSpacing: 1,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
-  },
-  cancelReasonText: {
-    fontSize: 11.5,
-    color: '#D93838',
-    marginTop: -2,
-    marginBottom: 6,
-    fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   modalOverlay: {
     flex: 1,
@@ -908,7 +1422,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#2A2421',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   modalCloseBtn: {
     padding: 4,
@@ -918,7 +1431,6 @@ const styles = StyleSheet.create({
     color: '#7A7067',
     marginBottom: 14,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   reasonList: {
     marginBottom: 10,
@@ -958,7 +1470,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#2A2421',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   radioLabelActive: {
     fontWeight: '600',
@@ -977,7 +1488,6 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     marginBottom: 14,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   modalFooter: {
     flexDirection: 'row',
@@ -998,7 +1508,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#2A2421',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   modalConfirmBtn: {
     paddingVertical: 11,
@@ -1014,7 +1523,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   productItemImage: {
     width: 64,
