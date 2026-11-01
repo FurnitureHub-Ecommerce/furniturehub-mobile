@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -8,9 +8,11 @@ import {
   Platform,
   ActivityIndicator,
   RefreshControl,
+  Clipboard,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { getOrdersApi, OrderItem, formatCurrency } from "@/services/api";
 
@@ -33,26 +35,91 @@ export default function OrderHistoryScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const fetchOrders = async () => {
+  const hasLoadedRef = useRef(false);
+
+  const fetchOrders = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
     try {
+      if (!silent) {
+        setLoading(true);
+      }
       const data = await getOrdersApi();
       setOrders(data);
+      hasLoadedRef.current = true;
     } catch (err) {
       console.warn("Lỗi tải danh sách đơn hàng:", err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
-
-  useEffect(() => {
-    fetchOrders();
   }, []);
+
+  // Tự động fetch lại khi màn hình được active
+  useFocusEffect(
+    useCallback(() => {
+      fetchOrders({ silent: hasLoadedRef.current });
+    }, [fetchOrders])
+  );
+
+  // Polling nhẹ mỗi 12 giây nếu có đơn chưa hoàn thành/hủy
+  useEffect(() => {
+    const hasActiveOrders = orders.some((o) => {
+      const s = (o.status || "").toLowerCase().trim();
+      const l = (o.statusLabel || "").toLowerCase().trim();
+      const isDone =
+        s === "delivered" ||
+        s === "completed" ||
+        s === "đã giao hàng" ||
+        s === "đã giao" ||
+        l === "đã giao" ||
+        l === "đã giao hàng" ||
+        s === "cancelled" ||
+        s === "canceled" ||
+        s === "rejected" ||
+        s === "đã hủy" ||
+        s.includes("hủy") ||
+        l.includes("hủy");
+      return !isDone;
+    });
+
+    if (!hasActiveOrders) return;
+
+    const intervalId = setInterval(() => {
+      fetchOrders({ silent: true });
+    }, 12000);
+
+    return () => clearInterval(intervalId);
+  }, [orders, fetchOrders]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchOrders();
+    fetchOrders({ silent: true });
+  };
+
+  const handleCopyOrderCode = async (orderCode: string, itemId: string) => {
+    if (!orderCode) return;
+    try {
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard &&
+        typeof navigator.clipboard.writeText === "function"
+      ) {
+        await navigator.clipboard.writeText(orderCode);
+      } else if (Clipboard && typeof Clipboard.setString === "function") {
+        Clipboard.setString(orderCode);
+      }
+      setCopiedId(itemId);
+      setTimeout(() => {
+        setCopiedId((prev) => (prev === itemId ? null : prev));
+      }, 2000);
+      if (Platform.OS !== "web") {
+        Alert.alert("Đã sao chép", `Đã sao chép mã đơn hàng ${orderCode}`);
+      }
+    } catch (err) {
+      console.warn("Không thể sao chép mã đơn hàng:", err);
+    }
   };
 
   const filteredOrders = orders.filter((order) => {
@@ -178,13 +245,10 @@ export default function OrderHistoryScreen() {
     return { bg: "#FEF5E7", text: "#E67E22", label: "Đang Xử Lý" };
   };
 
-  // Cắt ngắn Mã đơn hàng chỉ hiển thị 8-10 ký tự cuối gọn đẹp
-  const formatOrderId = (rawId: string, orderNumber?: string) => {
-    if (orderNumber && orderNumber.length <= 12) return `#${orderNumber}`;
-    if (rawId) {
-      return `#${rawId.slice(-8).toUpperCase()}`;
-    }
-    return "#LUMORA";
+  // Đồng bộ mã đơn hàng: lấy 8 ký tự cuối viết hoa từ _id
+  const getOrderCode = (order?: OrderItem) => {
+    const rawId = order?._id || order?.id || "";
+    return rawId ? `#${String(rawId).slice(-8).toUpperCase()}` : "";
   };
 
   return (
@@ -286,6 +350,8 @@ export default function OrderHistoryScreen() {
             const statusInfo = getStatusInfo(item.status, item.statusLabel);
             const totalQty =
               item.items?.reduce((sum, it) => sum + it.qty, 0) || 1;
+            const orderCode = getOrderCode(item);
+            const isCopied = copiedId === item.id;
 
             return (
               <TouchableOpacity
@@ -296,9 +362,28 @@ export default function OrderHistoryScreen() {
                 activeOpacity={0.9}
               >
                 <View style={styles.cardHeader}>
-                  <Text style={styles.orderId} numberOfLines={1}>
-                    {formatOrderId(item.id, item.orderNumber)}
-                  </Text>
+                  <View style={styles.orderCodeWrap}>
+                    <Text style={styles.orderId} numberOfLines={1}>
+                      {orderCode}
+                    </Text>
+                    {orderCode ? (
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleCopyOrderCode(orderCode, item.id);
+                        }}
+                        style={styles.copyIconBtn}
+                        activeOpacity={0.7}
+                      >
+                        <Feather
+                          name={isCopied ? "check" : "copy"}
+                          size={12}
+                          color={isCopied ? "#2E7D32" : "#8A6A48"}
+                        />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+
                   <View
                     style={[
                       styles.statusBadge,
@@ -478,7 +563,7 @@ const styles = StyleSheet.create({
   orderCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    padding: 14,
+    padding: 16,
     borderWidth: 1,
     borderColor: "#E8E2D8",
     marginBottom: 12,
@@ -487,49 +572,62 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 5,
     elevation: 2,
-    overflow: "hidden",
   },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 4,
+    marginBottom: 6,
     gap: 8,
+  },
+  orderCodeWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
   },
   orderId: {
     fontSize: 14,
+    lineHeight: 20,
     fontWeight: "700",
     color: "#2A2421",
     fontFamily: FONTS.SANS,
-    flex: 1,
-    includeFontPadding: false,
+  },
+  copyIconBtn: {
+    padding: 4,
+    borderRadius: 6,
+    backgroundColor: "#FAF7F2",
+    borderWidth: 1,
+    borderColor: "#E8E2D8",
   },
   statusBadge: {
-    paddingVertical: 3,
+    paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 6,
   },
   statusText: {
     fontSize: 10,
+    lineHeight: 14,
     fontWeight: "700",
     letterSpacing: 0.5,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   dateText: {
-    fontSize: 11,
+    fontSize: 11.5,
+    lineHeight: 18,
     color: "#7A7067",
+    marginTop: 6,
     marginBottom: 8,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   firstItemName: {
     fontSize: 13,
+    lineHeight: 20,
     fontWeight: "500",
     color: "#2A2421",
+    marginTop: 2,
     marginBottom: 10,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   cardFooter: {
     flexDirection: "row",
