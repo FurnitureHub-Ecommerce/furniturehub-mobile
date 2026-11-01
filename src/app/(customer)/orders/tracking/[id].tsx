@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -10,11 +10,14 @@ import {
   Modal,
   TextInput,
   Alert,
+  RefreshControl,
+  Clipboard,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import {
+  apiRequest,
   getOrderTrackingApi,
   getOrderDetailApi,
   getUserProfileApi,
@@ -35,6 +38,255 @@ const CANCEL_REASONS = [
   "Đổi ý, không còn nhu cầu đặt mua",
   "Khác",
 ];
+
+// Quét lý do hủy / từ chối từ nhiều nguồn dữ liệu của Order & Tracking
+const extractCancelOrRejectReason = (
+  orderObj?: any,
+  trackingObj?: any,
+  localReason?: string
+): string => {
+  const candidates: string[] = [];
+
+  if (localReason && typeof localReason === "string" && localReason.trim()) {
+    candidates.push(localReason.trim());
+  }
+
+  // 1. Quét mảng tiến trình: timeline, statusHistory, orderStatusHistory (ở bước CANCELLED hoặc REJECTED)
+  const historyArrays = [
+    orderObj?.timeline,
+    orderObj?.statusHistory,
+    orderObj?.orderStatusHistory,
+    orderObj?.history,
+    orderObj?.trackingTimeline,
+    trackingObj?.timeline,
+    trackingObj?.statusHistory,
+    trackingObj?.orderStatusHistory,
+    trackingObj?.history,
+    trackingObj?.steps,
+  ];
+
+  for (const arr of historyArrays) {
+    if (Array.isArray(arr) && arr.length > 0) {
+      const reversed = [...arr].reverse();
+      for (const step of reversed) {
+        if (!step || typeof step !== "object") continue;
+        const stepStatus = String(
+          step.status ||
+            step.state ||
+            step.toStatus ||
+            step.newStatus ||
+            step.stepStatus ||
+            step.title ||
+            ""
+        )
+          .toUpperCase()
+          .trim();
+
+        const isCancelOrRejectStep =
+          stepStatus === "CANCELLED" ||
+          stepStatus === "CANCELED" ||
+          stepStatus === "REJECTED" ||
+          stepStatus.includes("CANCEL") ||
+          stepStatus.includes("REJECT") ||
+          stepStatus.includes("HỦY") ||
+          stepStatus.includes("TỪ CHỐI");
+
+        if (isCancelOrRejectStep) {
+          const stepFields = [
+            step.rejectReason,
+            step.rejectedReason,
+            step.rejectionReason,
+            step.cancelReason,
+            step.cancellationReason,
+            step.reason,
+            step.note,
+            step.notes,
+            step.comment,
+            step.message,
+            step.description,
+          ];
+          for (const sf of stepFields) {
+            if (typeof sf === "string" && sf.trim().length > 0) {
+              candidates.push(sf.trim());
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Kết hợp các trường trực tiếp trên order và tracking
+  const directFields = [
+    orderObj?.rejectReason,
+    orderObj?.rejectedReason,
+    orderObj?.rejectionReason,
+    orderObj?.cancelReason,
+    orderObj?.cancellationReason,
+    orderObj?.canceledReason,
+    orderObj?.reason,
+    orderObj?.statusReason,
+    orderObj?.adminNote,
+    orderObj?.staffNote,
+    orderObj?.note,
+    trackingObj?.rejectReason,
+    trackingObj?.rejectedReason,
+    trackingObj?.rejectionReason,
+    trackingObj?.cancelReason,
+    trackingObj?.cancellationReason,
+    trackingObj?.canceledReason,
+    trackingObj?.reason,
+    trackingObj?.statusReason,
+    trackingObj?.note,
+  ];
+
+  for (const field of directFields) {
+    if (typeof field === "string" && field.trim().length > 0) {
+      candidates.push(field.trim());
+    }
+  }
+
+  const genericPlaceholders = [
+    "đã xác nhận hủy giao dịch",
+    "người mua yêu cầu hủy",
+    "khách hàng yêu cầu hủy",
+    "hết hàng hoặc thông tin không hợp lệ",
+    "đơn hàng đã bị hủy",
+    "đơn hàng bị từ chối",
+  ];
+
+  const cleanPrefix = (raw: string) => {
+    // Chỉ loại bỏ tiền tố "Lý do:" nếu chuỗi đã có sẵn để tránh lặp "Lý do: Lý do: ..."
+    // Tuyệt đối không dùng slice hoặc substring làm cụt chữ
+    return raw.replace(/^lý\s*do\s*(hủy|từ\s*chối)?\s*:\s*/i, "").trim();
+  };
+
+  for (const item of candidates) {
+    const cleaned = cleanPrefix(item);
+    if (
+      cleaned.length > 0 &&
+      !genericPlaceholders.includes(cleaned.toLowerCase())
+    ) {
+      return cleaned;
+    }
+  }
+
+  if (candidates.length > 0) {
+    const fallbackCleaned = cleanPrefix(candidates[0]);
+    if (fallbackCleaned.length > 0) return fallbackCleaned;
+  }
+
+  return "";
+};
+
+// Kiểm tra đơn hàng có phải bị từ chối bởi Staff / Cửa hàng hay không
+const checkIsRejectedByStaff = (orderObj?: any, trackingObj?: any): boolean => {
+  const s = String(trackingObj?.status || orderObj?.status || "")
+    .toLowerCase()
+    .trim();
+  const l = String(orderObj?.statusLabel || "")
+    .toLowerCase()
+    .trim();
+
+  if (
+    s === "rejected" ||
+    s.includes("reject") ||
+    s.includes("từ chối") ||
+    l.includes("từ chối")
+  ) {
+    return true;
+  }
+
+  if (
+    orderObj?.rejectReason ||
+    orderObj?.rejectedReason ||
+    orderObj?.rejectionReason ||
+    trackingObj?.rejectReason ||
+    trackingObj?.rejectedReason ||
+    trackingObj?.rejectionReason
+  ) {
+    return true;
+  }
+
+  const actor = String(
+    orderObj?.cancelledBy ||
+      orderObj?.canceledBy ||
+      orderObj?.rejectedBy ||
+      orderObj?.updatedByRole ||
+      trackingObj?.cancelledBy ||
+      trackingObj?.rejectedBy ||
+      ""
+  )
+    .toUpperCase()
+    .trim();
+
+  if (
+    actor === "STAFF" ||
+    actor === "ADMIN" ||
+    actor === "STORE" ||
+    actor === "SHOP" ||
+    actor === "MANAGER"
+  ) {
+    return true;
+  }
+
+  const historyArrays = [
+    orderObj?.timeline,
+    orderObj?.statusHistory,
+    orderObj?.orderStatusHistory,
+    orderObj?.history,
+    trackingObj?.timeline,
+    trackingObj?.statusHistory,
+    trackingObj?.orderStatusHistory,
+    trackingObj?.history,
+    trackingObj?.steps,
+  ];
+
+  for (const arr of historyArrays) {
+    if (Array.isArray(arr)) {
+      for (const step of arr) {
+        if (!step || typeof step !== "object") continue;
+        const stepStatus = String(
+          step.status || step.state || step.toStatus || step.newStatus || ""
+        )
+          .toUpperCase()
+          .trim();
+
+        if (
+          stepStatus === "REJECTED" ||
+          stepStatus.includes("REJECT") ||
+          stepStatus.includes("TỪ CHỐI")
+        ) {
+          return true;
+        }
+        if (step.rejectReason || step.rejectedReason || step.rejectionReason) {
+          return true;
+        }
+        const stepActor = String(
+          step.updatedByRole ||
+            step.role ||
+            step.actor ||
+            step.cancelledBy ||
+            step.rejectedBy ||
+            step.performerRole ||
+            ""
+        )
+          .toUpperCase()
+          .trim();
+        if (
+          (stepStatus.includes("CANCEL") || stepStatus.includes("HỦY")) &&
+          (stepActor === "STAFF" ||
+            stepActor === "ADMIN" ||
+            stepActor === "STORE" ||
+            stepActor === "SHOP")
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+};
 
 interface CancelOrderModalProps {
   visible: boolean;
@@ -182,50 +434,160 @@ export default function OrderTrackingScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [loading, setLoading] = useState(true);
-  const [order, setOrder] = useState<OrderItem | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [order, setOrder] = useState<(OrderItem & Record<string, any>) | null>(null);
   const [trackingData, setTrackingData] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [copied, setCopied] = useState(false);
 
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [canceling, setCanceling] = useState(false);
   const [cancelReasonText, setCancelReasonText] = useState<string>("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const fetchOrderDetail = useCallback(async () => {
-    try {
-      setLoading(true);
-      const orderId = id || "";
-      if (!orderId) return;
+  const hasLoadedRef = useRef(false);
 
-      const [orderRes, trackingRes, profileRes] = await Promise.allSettled([
-        getOrderDetailApi(orderId),
-        getOrderTrackingApi(orderId),
-        getUserProfileApi(),
-      ]);
+  const fetchOrderDetail = useCallback(
+    async (options?: { silent?: boolean; isRefresh?: boolean }) => {
+      const silent = options?.silent ?? false;
+      const isRefresh = options?.isRefresh ?? false;
 
-      if (orderRes.status === "fulfilled") {
-        setOrder(orderRes.value);
-      }
-      if (trackingRes.status === "fulfilled") {
-        setTrackingData(trackingRes.value);
-      }
-      if (profileRes.status === "fulfilled") {
-        setUserProfile(
-          profileRes.value?.user ||
-            profileRes.value?.data ||
-            profileRes.value,
-        );
-      }
-    } catch (error) {
-      console.warn("Lỗi tải thông tin vận chuyển:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+      try {
+        if (isRefresh) {
+          setRefreshing(true);
+        } else if (!silent) {
+          setLoading(true);
+        }
+        const orderId = id || "";
+        if (!orderId) return;
 
-  useEffect(() => {
-    fetchOrderDetail();
+        const [orderRes, rawOrderRes, trackingRes, profileRes] =
+          await Promise.allSettled([
+            getOrderDetailApi(orderId),
+            apiRequest(`/api/orders/${orderId}`),
+            getOrderTrackingApi(orderId),
+            getUserProfileApi(),
+          ]);
+
+        const rawOrderObj =
+          rawOrderRes.status === "fulfilled"
+            ? rawOrderRes.value?.data?.order ||
+              rawOrderRes.value?.data ||
+              rawOrderRes.value?.order ||
+              rawOrderRes.value ||
+              {}
+            : {};
+
+        const trackingVal =
+          trackingRes.status === "fulfilled" ? trackingRes.value : null;
+
+        if (orderRes.status === "fulfilled") {
+          const orderData = orderRes.value;
+          setOrder({
+            ...rawOrderObj,
+            ...orderData,
+            _id: rawOrderObj?._id || orderData?._id || orderData?.id,
+            id: orderData?.id || rawOrderObj?._id || rawOrderObj?.id,
+            timeline:
+              rawOrderObj?.timeline ||
+              rawOrderObj?.statusHistory ||
+              rawOrderObj?.orderStatusHistory ||
+              trackingVal?.timeline ||
+              trackingVal?.statusHistory ||
+              trackingVal?.orderStatusHistory,
+            statusHistory:
+              rawOrderObj?.statusHistory ||
+              rawOrderObj?.orderStatusHistory ||
+              trackingVal?.statusHistory,
+            orderStatusHistory:
+              rawOrderObj?.orderStatusHistory ||
+              rawOrderObj?.statusHistory ||
+              trackingVal?.orderStatusHistory,
+            rejectReason:
+              rawOrderObj?.rejectReason ||
+              rawOrderObj?.rejectedReason ||
+              rawOrderObj?.rejectionReason ||
+              trackingVal?.rejectReason ||
+              trackingVal?.rejectedReason,
+            rejectedReason:
+              rawOrderObj?.rejectedReason ||
+              rawOrderObj?.rejectReason ||
+              trackingVal?.rejectedReason,
+            cancelReason:
+              rawOrderObj?.cancelReason ||
+              rawOrderObj?.cancellationReason ||
+              orderData?.cancelReason ||
+              trackingVal?.cancelReason,
+            reason:
+              rawOrderObj?.reason ||
+              trackingVal?.reason ||
+              orderData?.cancelReason,
+          });
+        } else if (rawOrderObj && (rawOrderObj._id || rawOrderObj.id)) {
+          setOrder(rawOrderObj);
+        }
+
+        if (trackingVal) {
+          setTrackingData(trackingVal);
+        }
+        if (profileRes.status === "fulfilled") {
+          setUserProfile(
+            profileRes.value?.user ||
+              profileRes.value?.data ||
+              profileRes.value,
+          );
+        }
+        hasLoadedRef.current = true;
+      } catch (error) {
+        console.warn("Lỗi tải thông tin vận chuyển:", error);
+      } finally {
+        if (isRefresh) {
+          setRefreshing(false);
+        }
+        if (!silent) {
+          setLoading(false);
+        }
+      }
+    },
+    [id]
+  );
+
+  // Tự động fetch lại mỗi khi màn hình được active
+  useFocusEffect(
+    useCallback(() => {
+      fetchOrderDetail({ silent: hasLoadedRef.current });
+    }, [fetchOrderDetail])
+  );
+
+  const onRefresh = useCallback(() => {
+    fetchOrderDetail({ silent: true, isRefresh: true });
   }, [fetchOrderDetail]);
+
+  // Đồng bộ mã đơn hàng: lấy 8 ký tự cuối viết hoa từ _id
+  const rawOrderId = order?._id || order?.id || id || "";
+  const orderCode = rawOrderId ? `#${String(rawOrderId).slice(-8).toUpperCase()}` : "";
+
+  const handleCopyOrderCode = async () => {
+    if (!orderCode) return;
+    try {
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard &&
+        typeof navigator.clipboard.writeText === "function"
+      ) {
+        await navigator.clipboard.writeText(orderCode);
+      } else if (Clipboard && typeof Clipboard.setString === "function") {
+        Clipboard.setString(orderCode);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      if (Platform.OS !== "web") {
+        Alert.alert("Đã sao chép", `Đã sao chép mã đơn hàng ${orderCode}`);
+      }
+    } catch (err) {
+      console.warn("Không thể sao chép mã đơn hàng:", err);
+    }
+  };
 
   // Chỉ gọi API khi nhấn nút 'Xác nhận hủy' BÊN TRONG Modal
   const handleConfirmCancelWithReason = async (reason: string) => {
@@ -236,7 +598,7 @@ export default function OrderTrackingScreen() {
     try {
       setCanceling(true);
       const targetOrderId = String(
-        (order as any)?._id || order?.id || id || "",
+        order?._id || order?.id || id || "",
       );
 
       // Gọi API hủy đơn và truyền kèm lý do vào body:
@@ -251,6 +613,7 @@ export default function OrderTrackingScreen() {
         status: "CANCELLED",
         updatedAt: nowIso,
         cancelReason: reason.trim(),
+        reason: reason.trim(),
       }));
       setOrder((prev) =>
         prev
@@ -258,6 +621,8 @@ export default function OrderTrackingScreen() {
               ...prev,
               status: "CANCELLED",
               statusLabel: "Đã Hủy",
+              cancelReason: reason.trim(),
+              reason: reason.trim(),
             }
           : prev,
       );
@@ -267,7 +632,7 @@ export default function OrderTrackingScreen() {
       Alert.alert("Thành công", "Đơn hàng đã được hủy");
 
       // Refresh lại dữ liệu đơn hàng
-      await fetchOrderDetail();
+      await fetchOrderDetail({ silent: true });
     } catch (error: any) {
       Alert.alert(
         "Lỗi",
@@ -289,12 +654,17 @@ export default function OrderTrackingScreen() {
       s === "đã hủy" ||
       s === "da huy" ||
       s.includes("hủy") ||
-      s.includes("cancel")
+      s.includes("từ chối") ||
+      s.includes("cancel") ||
+      s.includes("reject")
     );
   };
 
+  const isRejectedByStaff = checkIsRejectedByStaff(order, trackingData);
+
   // Việt hóa trạng thái hệ thống
   const formatStatusLabel = (rawStatus?: string) => {
+    if (isRejectedByStaff) return "Đơn hàng bị từ chối bởi Cửa hàng";
     const s = (rawStatus || "").toLowerCase().trim();
     if (checkIsCancelled(s)) return "Đã Hủy";
     if (s === "delivered" || s === "đã giao hàng") return "Đã giao hàng";
@@ -322,11 +692,44 @@ export default function OrderTrackingScreen() {
     });
   };
 
-  // Kiểm tra trạng thái đơn hàng đã hủy hay chưa
+  // Kiểm tra trạng thái đơn hàng đã hủy / từ chối hay chưa
   const isOrderCancelled =
+    isRejectedByStaff ||
     checkIsCancelled(trackingData?.status) ||
     checkIsCancelled(order?.status) ||
     checkIsCancelled(order?.statusLabel);
+
+  const rawSystemStatus = trackingData?.status || order?.status;
+  const normalizedStatus = (rawSystemStatus || "").toLowerCase().trim();
+
+  const isOrderDelivered =
+    normalizedStatus === "delivered" ||
+    normalizedStatus === "completed" ||
+    normalizedStatus === "đã giao hàng" ||
+    normalizedStatus === "đã giao";
+
+  const extractedReason = extractCancelOrRejectReason(
+    order,
+    trackingData,
+    cancelReasonText
+  );
+
+  const reasonToDisplay =
+    extractedReason ||
+    (isRejectedByStaff
+      ? "Cửa hàng từ chối tiếp nhận đơn hàng"
+      : "Người mua yêu cầu hủy đơn hàng");
+
+  // Polling nhẹ mỗi 12 giây nếu đơn chưa hoàn thành/hủy
+  useEffect(() => {
+    if (!id || isOrderDelivered || isOrderCancelled) return;
+
+    const intervalId = setInterval(() => {
+      fetchOrderDetail({ silent: true });
+    }, 12000);
+
+    return () => clearInterval(intervalId);
+  }, [id, isOrderDelivered, isOrderCancelled, fetchOrderDetail]);
 
   // Tạo Timeline 4 bước chuẩn
   const buildTimeline = () => {
@@ -339,12 +742,6 @@ export default function OrderTrackingScreen() {
     const updatedTime = formatDateTime(trackingData?.updatedAt) || "Mới đây";
 
     if (isOrderCancelled) {
-      const reasonToDisplay =
-        cancelReasonText ||
-        trackingData?.cancelReason ||
-        trackingData?.reason ||
-        "Đã xác nhận hủy giao dịch";
-
       return [
         {
           step: 1,
@@ -355,11 +752,10 @@ export default function OrderTrackingScreen() {
         },
         {
           step: 2,
-          title: rawStatus === "rejected" ? "Đã từ chối" : "ĐÃ HỦY",
-          description:
-            rawStatus === "rejected"
-              ? "Hết hàng hoặc thông tin không hợp lệ"
-              : `Lý do: ${reasonToDisplay}`,
+          title: isRejectedByStaff
+            ? "Đơn hàng bị từ chối bởi Cửa hàng"
+            : "ĐÃ HỦY",
+          description: `Lý do: ${reasonToDisplay}`,
           time: updatedTime,
           completed: true,
           isError: true,
@@ -426,8 +822,11 @@ export default function OrderTrackingScreen() {
   const timelineSteps = buildTimeline();
 
   const getStatusBadgeInfo = () => {
+    if (isRejectedByStaff) {
+      return { label: "ĐÃ TỪ CHỐI", bg: "#FEF2F2", text: "#DC2626" };
+    }
     if (isOrderCancelled) {
-      return { label: "ĐÃ HỦY", bg: "#FCE8E6", text: "#D93838" };
+      return { label: "ĐÃ HỦY", bg: "#FEF2F2", text: "#DC2626" };
     }
     const s = (trackingData?.status || order?.status || "")
       .toLowerCase()
@@ -447,11 +846,6 @@ export default function OrderTrackingScreen() {
   };
 
   const statusBadge = getStatusBadgeInfo();
-  const rawSystemStatus = trackingData?.status || order?.status;
-  const normalizedStatus = (rawSystemStatus || "").toLowerCase().trim();
-
-  const isOrderDelivered =
-    normalizedStatus === "delivered" || normalizedStatus === "đã giao hàng";
 
   // Lấy thông tin họ tên, điện thoại, địa chỉ chi tiết
   const recipientName =
@@ -487,7 +881,9 @@ export default function OrderTrackingScreen() {
         >
           <Feather name="arrow-left" size={18} color="#252525" />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, styles.headerTitleStyle]}>Theo Dõi Đơn Hàng</Text>
+        <Text style={[styles.headerTitle, styles.headerTitleStyle]}>
+          Theo Dõi Đơn Hàng
+        </Text>
         <TouchableOpacity
           onPress={() => router.push(`/(customer)/orders/${id}` as any)}
           style={styles.iconButton}
@@ -508,6 +904,14 @@ export default function OrderTrackingScreen() {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#8A6A48"
+              colors={["#8A6A48"]}
+            />
+          }
         >
           {/* Overview Card */}
           <View style={styles.overviewCard}>
@@ -537,22 +941,54 @@ export default function OrderTrackingScreen() {
             <View style={styles.infoRow}>
               <View style={styles.infoCol}>
                 <Text style={styles.infoSub}>Mã đơn hàng</Text>
-                <Text style={styles.infoVal}>
-                  #{id ? id.slice(-8).toUpperCase() : "LUMORA"}
-                </Text>
+                <View style={styles.orderCodeRow}>
+                  <Text style={styles.infoVal}>
+                    {orderCode || "#LUMORA"}
+                  </Text>
+                  {orderCode ? (
+                    <TouchableOpacity
+                      onPress={handleCopyOrderCode}
+                      style={styles.copyCodeBtn}
+                      activeOpacity={0.75}
+                    >
+                      <Feather
+                        name={copied ? "check" : "copy"}
+                        size={11}
+                        color={copied ? "#2E7D32" : "#8A6A48"}
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               </View>
               <View style={styles.infoCol}>
                 <Text style={styles.infoSub}>Trạng thái hệ thống</Text>
                 <Text
                   style={[
                     styles.infoVal,
-                    isOrderCancelled && { color: "#D93838", fontWeight: "700" },
+                    isOrderCancelled && { color: "#DC2626", fontWeight: "700" },
                   ]}
                 >
                   {formatStatusLabel(rawSystemStatus)}
                 </Text>
               </View>
             </View>
+
+            {/* Khối hiển thị lý do hủy / từ chối màu nền đỏ nhạt (#FEF2F2) */}
+            {isOrderCancelled && (
+              <View style={styles.cancelReasonBox}>
+                <View style={styles.cancelReasonHeader}>
+                  <Feather name="alert-circle" size={15} color="#DC2626" />
+                  <Text style={styles.cancelReasonTitle}>
+                    {isRejectedByStaff
+                      ? "Đơn hàng bị từ chối bởi Cửa hàng"
+                      : "Đơn hàng đã bị hủy"}
+                  </Text>
+                </View>
+                <Text style={styles.cancelReasonText}>
+                  {`Lý do: ${reasonToDisplay}`}
+                </Text>
+              </View>
+            )}
 
             <View style={styles.estimatedDeliveryBox}>
               <Ionicons name="calendar-outline" size={18} color="#8A6A48" />
@@ -620,14 +1056,22 @@ export default function OrderTrackingScreen() {
                         style={[
                           styles.stepTitle,
                           isCompleted && styles.stepTitleActive,
-                          isError && { color: "#D93838", fontWeight: "700" },
+                          isError && { color: "#DC2626", fontWeight: "700" },
                         ]}
                       >
                         {step.title}
                       </Text>
                       <Text style={styles.stepTime}>{step.time}</Text>
                     </View>
-                    <Text style={styles.stepDesc}>{step.description}</Text>
+                    {isError ? (
+                      <View style={styles.timelineErrorBox}>
+                        <Text style={styles.timelineErrorText}>
+                          {step.description}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.stepDesc}>{step.description}</Text>
+                    )}
                   </View>
                 </View>
               );
@@ -725,14 +1169,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#2b221d",
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   headerTitleStyle: {
     fontSize: 18,
     fontWeight: "700",
     color: "#2b221d",
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   loadingContainer: {
     flex: 1,
@@ -745,7 +1187,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#7A7067",
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   scrollContent: {
     padding: 16,
@@ -775,14 +1216,12 @@ const styles = StyleSheet.create({
     color: "#cc6e0a",
     marginBottom: 3,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   carrierName: {
     fontSize: 13.5,
     fontWeight: "600",
     color: "#161413",
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   transitBadge: {
     paddingVertical: 4,
@@ -794,7 +1233,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.8,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   divider: {
     height: 1,
@@ -805,6 +1243,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 12,
+    gap: 10,
   },
   infoCol: {
     flex: 1,
@@ -814,14 +1253,54 @@ const styles = StyleSheet.create({
     color: "#7A7067",
     marginBottom: 2,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
+  },
+  orderCodeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  copyCodeBtn: {
+    padding: 4,
+    borderRadius: 6,
+    backgroundColor: "#FAF7F2",
+    borderWidth: 1,
+    borderColor: "#E8E2D8",
   },
   infoVal: {
     fontSize: 13,
+    lineHeight: 18,
     fontWeight: "600",
     color: "#2A2421",
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
+  },
+  cancelReasonBox: {
+    backgroundColor: "#FEF2F2",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    padding: 12,
+    marginBottom: 12,
+  },
+  cancelReasonHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  cancelReasonTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700",
+    color: "#991B1B",
+    fontFamily: FONTS.SANS,
+    flex: 1,
+  },
+  cancelReasonText: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: "#DC2626",
+    fontWeight: "500",
+    fontFamily: FONTS.SANS,
   },
   estimatedDeliveryBox: {
     flexDirection: "row",
@@ -837,7 +1316,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#2A2421",
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   estimatedBold: {
     fontWeight: "700",
@@ -849,7 +1327,6 @@ const styles = StyleSheet.create({
     color: "#ce6b00",
     marginBottom: 10,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
     marginLeft: 6,
   },
   timelineCard: {
@@ -886,7 +1363,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#8A6A48",
   },
   nodeCircleError: {
-    backgroundColor: "#D93838",
+    backgroundColor: "#DC2626",
   },
   currentDot: {
     width: 8,
@@ -909,7 +1386,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#8A6A48",
   },
   verticalLineError: {
-    backgroundColor: "#F5C6C6",
+    backgroundColor: "#FECACA",
   },
   stepInfoCol: {
     flex: 1,
@@ -919,16 +1396,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "baseline",
-    marginBottom: 3,
+    marginBottom: 4,
   },
   stepTitle: {
     fontSize: 12.5,
+    lineHeight: 18,
     fontWeight: "600",
     color: "#7A7067",
     flex: 1,
     paddingRight: 6,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   stepTitleActive: {
     color: "#2A2421",
@@ -939,14 +1416,28 @@ const styles = StyleSheet.create({
     color: "#8A6A48",
     fontWeight: "500",
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   stepDesc: {
     fontSize: 11.5,
     color: "#7A7067",
     lineHeight: 16,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
+  },
+  timelineErrorBox: {
+    backgroundColor: "#FEF2F2",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginTop: 4,
+  },
+  timelineErrorText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#DC2626",
+    fontWeight: "500",
+    fontFamily: FONTS.SANS,
   },
   serviceNoteCard: {
     flexDirection: "row",
@@ -980,14 +1471,12 @@ const styles = StyleSheet.create({
     color: "#000000",
     marginBottom: 2,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   serviceNoteDesc: {
     fontSize: 11.5,
     color: "#ffffff",
     lineHeight: 16,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   addressCard: {
     backgroundColor: "#FFFFFF",
@@ -1012,7 +1501,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#af671b",
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   recipientName: {
     fontSize: 12.5,
@@ -1020,14 +1508,12 @@ const styles = StyleSheet.create({
     color: "#2A2421",
     marginBottom: 3,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   recipientAddress: {
     fontSize: 11.5,
     color: "#7A7067",
     lineHeight: 17,
     fontFamily: FONTS.SANS,
-    includeFontPadding: false,
   },
   cancelOrderBtn: {
     flexDirection: "row",

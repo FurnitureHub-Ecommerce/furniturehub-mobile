@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { useApp } from '@/context/AppContext';
 import { createOrderApi, formatCurrency } from '@/services/api';
 
@@ -23,7 +23,7 @@ const FONTS = {
   SANS: Platform.OS === 'ios' ? 'System' : 'sans-serif',
 };
 
-type PaymentMethodType = 'cod' | 'qr' | 'card' | 'wallet';
+type PaymentMethodType = 'cod' | 'vnpay' | 'momo' | 'qr' | 'card' | 'wallet';
 
 export default function PaymentScreen() {
   const router = useRouter();
@@ -35,50 +35,76 @@ export default function PaymentScreen() {
     ward?: string;
     city?: string;
     fullAddress?: string;
+    selectedMethod?: string;
+    returnToCheckout?: string;
   }>();
 
   const { cart, subtotal, shipping, total, clearCart } = useApp();
-  
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethodType>('cod');
+
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethodType>(
+    (params.selectedMethod as PaymentMethodType) || 'cod'
+  );
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
-  
+
   const [processing, setProcessing] = useState(false);
 
-  const getPaymentMethodLabel = () => {
-    switch (selectedMethod) {
-      case 'cod':
-        return 'Thanh toán tiền mặt khi nhận hàng (COD)';
-      case 'qr':
-        return 'Chuyển khoản Ngân hàng (Mã QR VietQR)';
-      case 'card':
-        return 'Thẻ Tín Dụng / Ghi Nợ Quốc Tế';
-      case 'wallet':
-        return 'Ví Điện Tử Apple Pay / MoMo';
-      default:
-        return 'Thanh toán khi nhận hàng';
-    }
-  };
+  const isConfirmDisabled = processing || !selectedMethod;
 
- const handlePlaceOrder = async () => {
-    if (cart.length === 0) {
-      Alert.alert('Giỏ hàng trống', 'Vui lòng chọn sản phẩm trước khi đặt hàng.');
-      return;
-    }
-
-    // Lấy addressId từ params
-    const addressId = params.addressId;
-
-    if (!addressId) {
-      Alert.alert('Lỗi địa chỉ', 'Không tìm thấy ID địa chỉ giao hàng hợp lệ. Vui lòng quay lại chọn địa chỉ.');
-      return;
-    }
-
+  const handlePlaceOrder = async () => {
     try {
+      console.log('Selected Payment Method:', selectedMethod);
+
+      if (!selectedMethod) {
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          window.alert('Vui lòng chọn phương thức thanh toán.');
+        } else {
+          Alert.alert('Thông báo', 'Vui lòng chọn phương thức thanh toán.');
+        }
+        return;
+      }
+
+      // Nếu màn hình này được mở để chọn phương thức thanh toán rồi quay về CheckoutScreen
+      if (params.returnToCheckout === 'true') {
+        router.navigate({
+          pathname: '/(customer)/checkout',
+          params: {
+            ...params,
+            selectedMethod,
+          },
+        } as any);
+        return;
+      }
+
+      if (cart.length === 0) {
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          window.alert('Giỏ hàng trống. Vui lòng chọn sản phẩm trước khi đặt hàng.');
+        } else {
+          Alert.alert('Giỏ hàng trống', 'Vui lòng chọn sản phẩm trước khi đặt hàng.');
+        }
+        return;
+      }
+
+      // Lấy addressId từ params
+      const addressId = params.addressId;
+
+      if (!addressId) {
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          window.alert('Không tìm thấy địa chỉ giao hàng hợp lệ. Vui lòng quay lại chọn địa chỉ.');
+        } else {
+          Alert.alert(
+            'Lỗi địa chỉ',
+            'Không tìm thấy ID địa chỉ giao hàng hợp lệ. Vui lòng quay lại chọn địa chỉ.'
+          );
+        }
+        router.back();
+        return;
+      }
+
       setProcessing(true);
 
-      // KHỚP 100% SWAGGER: Request Body CHỈ gửi duy nhất addressId
+      // KHỚP 100% SWAGGER: Request Body gửi addressId
       const orderPayload = {
         addressId: String(addressId),
       };
@@ -95,14 +121,34 @@ export default function PaymentScreen() {
         result?.data?._id ||
         result?.data?.id;
 
+      const orderCode = realOrderId
+        ? `#${String(realOrderId).slice(-8).toUpperCase()}`
+        : '';
+
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined') {
+          window.alert(
+            orderCode
+              ? `Đặt Hàng Thành Công!\nCảm ơn bạn! Đơn hàng ${orderCode} đã được ghi nhận thành công trên hệ thống.`
+              : 'Đặt Hàng Thành Công!\nCảm ơn bạn! Đơn hàng của bạn đã được ghi nhận thành công.'
+          );
+        }
+        if (realOrderId) {
+          router.replace(`/(customer)/orders/${realOrderId}` as any);
+        } else {
+          router.replace('/(customer)/orders' as any);
+        }
+        return;
+      }
+
       if (realOrderId) {
         Alert.alert(
           'Đặt Hàng Thành Công',
-          `Cảm ơn bạn! Đơn hàng #${realOrderId} đã được ghi nhận thành công trên hệ thống.`,
+          `Cảm ơn bạn! Đơn hàng ${orderCode} đã được ghi nhận thành công trên hệ thống.`,
           [
             {
               text: 'Xem Đơn Hàng',
-              onPress: () => router.replace('/(customer)/orders' as any),
+              onPress: () => router.replace(`/(customer)/orders/${realOrderId}` as any),
             },
             {
               text: 'Theo Dõi Giao Hàng',
@@ -125,7 +171,12 @@ export default function PaymentScreen() {
       }
     } catch (err: any) {
       console.warn('Lỗi tạo đơn hàng:', err);
-      Alert.alert('Lỗi đặt hàng', err.message || 'Không thể tạo đơn hàng vào lúc này.');
+      const errMsg = err?.message || 'Không thể tạo đơn hàng vào lúc này.';
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.alert(`Lỗi đặt hàng: ${errMsg}`);
+      } else {
+        Alert.alert('Lỗi đặt hàng', errMsg);
+      }
     } finally {
       setProcessing(false);
     }
@@ -208,10 +259,13 @@ export default function PaymentScreen() {
           )}
         </TouchableOpacity>
 
-        {/* 2. Chuyển Khoản Ngân Hàng Qua Mã QR (VietQR) */}
+        {/* 2. Chuyển Khoản Ngân Hàng Qua Mã QR (VietQR / VNPay) */}
         <TouchableOpacity
           onPress={() => setSelectedMethod('qr')}
-          style={[styles.methodCard, selectedMethod === 'qr' && styles.methodCardActive]}
+          style={[
+            styles.methodCard,
+            (selectedMethod === 'qr' || selectedMethod === 'vnpay') && styles.methodCardActive,
+          ]}
           activeOpacity={0.8}
         >
           <View style={styles.methodHeader}>
@@ -219,20 +273,26 @@ export default function PaymentScreen() {
               <Ionicons name="qr-code-outline" size={18} color="#8A6A48" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.methodTitle}>Chuyển khoản Ngân hàng (Mã QR VietQR)</Text>
+              <Text style={styles.methodTitle}>Chuyển khoản Ngân hàng (VNPay / Mã QR VietQR)</Text>
               <Text style={styles.methodSub}>Quét mã QR thanh toán nhanh qua ứng dụng ngân hàng</Text>
             </View>
             <Ionicons
-              name={selectedMethod === 'qr' ? 'radio-button-on' : 'radio-button-off'}
+              name={
+                selectedMethod === 'qr' || selectedMethod === 'vnpay'
+                  ? 'radio-button-on'
+                  : 'radio-button-off'
+              }
               size={20}
-              color={selectedMethod === 'qr' ? '#8A6A48' : '#A0988E'}
+              color={
+                selectedMethod === 'qr' || selectedMethod === 'vnpay' ? '#8A6A48' : '#A0988E'
+              }
             />
           </View>
 
-          {selectedMethod === 'qr' && (
+          {(selectedMethod === 'qr' || selectedMethod === 'vnpay') && (
             <View style={styles.qrContainer}>
               <Text style={styles.qrInstruction}>Mở app Ngân hàng và quét mã QR bên dưới:</Text>
-              
+
               <View style={styles.qrCodeBox}>
                 <Image
                   source={{
@@ -339,10 +399,13 @@ export default function PaymentScreen() {
           )}
         </TouchableOpacity>
 
-        {/* 4. Ví Điện Tử Một Chạm */}
+        {/* 4. Ví Điện Tử Một Chạm (MoMo / Apple Pay) */}
         <TouchableOpacity
           onPress={() => setSelectedMethod('wallet')}
-          style={[styles.methodCard, selectedMethod === 'wallet' && styles.methodCardActive]}
+          style={[
+            styles.methodCard,
+            (selectedMethod === 'wallet' || selectedMethod === 'momo') && styles.methodCardActive,
+          ]}
           activeOpacity={0.8}
         >
           <View style={styles.methodHeader}>
@@ -350,13 +413,19 @@ export default function PaymentScreen() {
               <Feather name="smartphone" size={18} color="#8A6A48" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.methodTitle}>Ví Điện Tử Một Chạm</Text>
+              <Text style={styles.methodTitle}>Ví Điện Tử Một Chạm (MoMo / Apple Pay)</Text>
               <Text style={styles.methodSub}>Apple Pay, Google Pay, MoMo, ZaloPay</Text>
             </View>
             <Ionicons
-              name={selectedMethod === 'wallet' ? 'radio-button-on' : 'radio-button-off'}
+              name={
+                selectedMethod === 'wallet' || selectedMethod === 'momo'
+                  ? 'radio-button-on'
+                  : 'radio-button-off'
+              }
               size={20}
-              color={selectedMethod === 'wallet' ? '#8A6A48' : '#A0988E'}
+              color={
+                selectedMethod === 'wallet' || selectedMethod === 'momo' ? '#8A6A48' : '#A0988E'
+              }
             />
           </View>
         </TouchableOpacity>
@@ -384,8 +453,8 @@ export default function PaymentScreen() {
       <View style={styles.footerBar}>
         <TouchableOpacity
           onPress={handlePlaceOrder}
-          disabled={processing}
-          style={[styles.payBtn, processing && { opacity: 0.7 }]}
+          disabled={isConfirmDisabled}
+          style={[styles.payBtn, isConfirmDisabled && { opacity: 0.7 }]}
           activeOpacity={0.88}
         >
           {processing ? (
@@ -606,7 +675,6 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '700',
     color: '#8A6A48',
-    
     marginBottom: 10,
   },
   summaryRow: {

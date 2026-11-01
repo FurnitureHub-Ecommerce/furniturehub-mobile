@@ -341,6 +341,7 @@ export const getCategoryDetailApi = async (id: string) => {
 
 // ==================== ORDER FLOW APIs ====================
 export interface OrderItem {
+  _id?: string;
   id: string;
   orderNumber?: string;
   date: string;
@@ -805,6 +806,7 @@ export const getOrdersApi = async (): Promise<OrderItem[]> => {
 
     // Map mảng dữ liệu thực từ Backend
     return list.map((order: any) => ({
+      _id: order._id || order.id,
       id: order._id || order.id,
       orderNumber: order.orderNumber || order._id || order.id,
       date: order.createdAt
@@ -881,6 +883,7 @@ export const getOrderDetailApi = async (id: string): Promise<OrderItem> => {
       : [];
 
   return {
+    _id: order._id || order.id,
     id: order._id || order.id,
     orderNumber: order.orderNumber || order._id || order.id,
     date: order.createdAt
